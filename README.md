@@ -61,9 +61,10 @@ The algorithm iterates to refine cluster assignments while enforcing fairness:
    Fairness is validated by comparing the current sensitive group ratio in a cluster to the global ratio:
    ```python
    current_ratio = (sensitive_counts[cluster][sensitive_value] + 1) / (total_in_cluster + 1)
-   fairness_penalty = abs(current_ratio - target_ratio)
+   target_ratio = global_ratios[sensitive_value]
+   ratio_difference = abs(current_ratio - target_ratio)
    dynamic_tolerance = self.fairness_tolerance / (iteration + 1) ** 0.5
-   return fairness_penalty <= dynamic_tolerance
+   return ratio_difference <= dynamic_tolerance
    ```
 
 3. **Centroid Update:**

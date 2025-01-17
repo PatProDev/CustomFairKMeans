@@ -116,11 +116,11 @@ class FairKMeans(BaseEstimator, ClusterMixin):
         target_ratio = global_ratios[sensitive_value]
         
         # Penalize distance if fairness is violated
-        fairness_penalty = abs(current_ratio - target_ratio) 
+        ratio_difference = abs(current_ratio - target_ratio) 
         # Using dynamic tolerance: Starting relaxed and tighten as iterations progress
         dynamic_tolerance = self.fairness_tolerance / (iteration + 1) ** 0.5
 
-        can_assign = fairness_penalty <= dynamic_tolerance
+        can_assign = ratio_difference <= dynamic_tolerance
         return can_assign
 
     def predict(self, X):
