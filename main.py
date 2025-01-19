@@ -11,7 +11,7 @@ from collections import Counter
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 
-n_clusters = 3
+n_clusters = 4
 
 # Preprocess the given dataset
 def process_dataset(X, sensitive_feature):
@@ -168,56 +168,56 @@ if __name__ == "__main__":
             print(f"    Sensitive Value {sf_value}: {percentage:.2f}%")
 
     # 1. Scatter Plot (Plotted test points colored by cluster assignment for both algorithms)
-    pca = PCA(n_components=2)
-    X_test_2D = pca.fit_transform(X_test)
+    # pca = PCA(n_components=2)
+    # X_test_2D = pca.fit_transform(X_test)
 
-    plt.figure(figsize=(10, 6))
-    plt.scatter(X_test_2D[:, 0], X_test_2D[:, 1], c=fair_predictions, cmap="viridis", alpha=0.7, edgecolor="k")
-    plt.title("FairKMeans Clustering (Scatter Plot)")
-    plt.xlabel("PCA Component 1")
-    plt.ylabel("PCA Component 2")
-    plt.colorbar(label="Cluster")
-    plt.savefig("fair_kmeans_scatter.png")
-    plt.close()
+    # plt.figure(figsize=(10, 6))
+    # plt.scatter(X_test_2D[:, 0], X_test_2D[:, 1], c=fair_predictions, cmap="viridis", alpha=0.7, edgecolor="k")
+    # plt.title("FairKMeans Clustering: Distribution Across Reduced Dimensions")
+    # plt.xlabel("PCA Reduced Feature 1")
+    # plt.ylabel("PCA Reduced Feature 2")
+    # plt.colorbar(label="Assigned Cluster")
+    # plt.savefig(f'graphs/fair_kmeans_scatter_{n_clusters}.png')
+    # plt.close()
 
-    plt.figure(figsize=(10, 6))
-    plt.scatter(X_test_2D[:, 0], X_test_2D[:, 1], c=regular_predictions, cmap="viridis", alpha=0.7, edgecolor="k")
-    plt.title("Regular KMeans Clustering (Scatter Plot)")
-    plt.xlabel("PCA Component 1")
-    plt.ylabel("PCA Component 2")
-    plt.colorbar(label="Cluster")
-    plt.savefig("regular_kmeans_scatter.png")
-    plt.close()
+    # plt.figure(figsize=(10, 6))
+    # plt.scatter(X_test_2D[:, 0], X_test_2D[:, 1], c=regular_predictions, cmap="viridis", alpha=0.7, edgecolor="k")
+    # plt.title("Regular KMeans Clustering: Distribution Across Reduced Dimensions")
+    # plt.xlabel("PCA Reduced Feature 1")
+    # plt.ylabel("PCA Reduced Feature 2")
+    # plt.colorbar(label="Assigned Cluster")
+    # plt.savefig(f'graphs/regular_kmeans_scatter_{n_clusters}.png')
+    # plt.close()
 
     # 2. Bar Chart (Sensitive Distribution)
-    plot_sensitive_distribution(fair_distribution, "FairKMeans Sensitive Group Distribution", "fair_kmeans_bar.png")
-    plot_sensitive_distribution(regular_distribution, "Regular KMeans Sensitive Group Distribution", "regular_kmeans_bar.png")
+    plot_sensitive_distribution(fair_distribution, "FairKMeans Sensitive Group Distribution", f'graphs/fair_kmeans_bar_{n_clusters}.png')
+    plot_sensitive_distribution(regular_distribution, "Regular KMeans Sensitive Group Distribution", f'graphs/regular_kmeans_bar_{n_clusters}.png')
 
-    # 3. Line Chart (Fairness Penalty)
-    global_ratios = {value: np.mean(sf_test == value) for value in np.unique(sf_test)}
-    n_clusters_range = range(2, 10)
-    fair_penalties = []
-    regular_penalties = []
+    # # 3. Line Chart (Fairness Penalty)
+    # global_ratios = {value: np.mean(sf_test == value) for value in np.unique(sf_test)}
+    # n_clusters_range = range(2, 10)
+    # fair_penalties = []
+    # regular_penalties = []
 
-    for n_clusters in n_clusters_range:
-        fair_kmeans = FairKMeans(n_clusters, random_state=42)
-        fair_kmeans.fit(X_train, sf_train)
-        fair_predictions = fair_kmeans.predict(X_test)
-        fair_distribution = cluster_sensitive_distribution(fair_predictions, sf_test)
-        fair_penalties.append(compute_fairness_penalty(fair_distribution, global_ratios))
+    # for n_clusters in n_clusters_range:
+    #     fair_kmeans = FairKMeans(n_clusters, random_state=42)
+    #     fair_kmeans.fit(X_train, sf_train)
+    #     fair_predictions = fair_kmeans.predict(X_test)
+    #     fair_distribution = cluster_sensitive_distribution(fair_predictions, sf_test)
+    #     fair_penalties.append(compute_fairness_penalty(fair_distribution, global_ratios))
 
-        regular_kmeans = KMeans(n_clusters, random_state=42)
-        regular_kmeans.fit(X_train)
-        regular_predictions = regular_kmeans.predict(X_test)
-        regular_distribution = cluster_sensitive_distribution(regular_predictions, sf_test)
-        regular_penalties.append(compute_fairness_penalty(regular_distribution, global_ratios))
+    #     regular_kmeans = KMeans(n_clusters, random_state=42)
+    #     regular_kmeans.fit(X_train)
+    #     regular_predictions = regular_kmeans.predict(X_test)
+    #     regular_distribution = cluster_sensitive_distribution(regular_predictions, sf_test)
+    #     regular_penalties.append(compute_fairness_penalty(regular_distribution, global_ratios))
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(n_clusters_range, fair_penalties, label="FairKMeans", marker="o")
-    plt.plot(n_clusters_range, regular_penalties, label="Regular KMeans", marker="o")
-    plt.title("Fairness Penalty vs Number of Clusters")
-    plt.xlabel("Number of Clusters")
-    plt.ylabel("Fairness Penalty")
-    plt.legend()
-    plt.savefig("fairness_penalty_line_chart.png")
-    plt.close()
+    # plt.figure(figsize=(10, 6))
+    # plt.plot(n_clusters_range, fair_penalties, label="FairKMeans", marker="o")
+    # plt.plot(n_clusters_range, regular_penalties, label="Regular KMeans", marker="o")
+    # plt.title("Fairness Penalty vs Number of Clusters")
+    # plt.xlabel("Number of Clusters")
+    # plt.ylabel("Fairness Penalty")
+    # plt.legend()
+    # plt.savefig("fairness_penalty_line_chart.png")
+    # plt.close()

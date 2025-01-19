@@ -222,19 +222,31 @@ X_train, X_test, sf_train, sf_test = train_test_split(
     X, sensitive_feature, test_size=0.2, random_state=42
 )
 
-# Initialize FairKMeans
+# Initialize and fit FairKMeans
 fair_kmeans = FairKMeans(n_clusters=3, max_iter=100, tol=1e-4, random_state=42)
-
-# Fit the model
 fair_kmeans.fit(X_train, sf_train)
 
 # Predict and evaluate FairKMeans on test set
 fair_predictions = fair_kmeans.predict(X_test)
 fair_distribution = cluster_sensitive_distribution(fair_predictions, sf_test)
 
+# Instantiate and fit the regular KMeans
+regular_kmeans = KMeans(n_clusters=3, random_state=42)
+regular_kmeans.fit(X_train)
+
+# Predict and evaluate KMeans on test set
+regular_predictions = regular_kmeans.predict(X_test)
+regular_distribution = cluster_sensitive_distribution(regular_predictions, sf_test)
+
 # Print sensitive feature distribution between clusters
 print("Sensitive Distribution (FairKMeans):")
 for cluster, data in fair_distribution.items():
+    print(f"  Cluster {cluster}:")
+    for sf_value, percentage in data["percentages"].items():
+        print(f"    Sensitive Value {sf_value}: {percentage:.2f}%")
+
+print("\nSensitive Distribution (Regular KMeans):")
+for cluster, data in regular_distribution.items():
     print(f"  Cluster {cluster}:")
     for sf_value, percentage in data["percentages"].items():
         print(f"    Sensitive Value {sf_value}: {percentage:.2f}%")
@@ -268,11 +280,61 @@ Sensitive Distribution (FairKMeans):
   Cluster 2:
     Sensitive Value 1: 57.72%
     Sensitive Value 0: 42.28%
+
+Sensitive Distribution (Regular KMeans):
+  Cluster 0:
+    Sensitive Value 0: 56.69%
+    Sensitive Value 1: 43.31%
+  Cluster 1:
+    Sensitive Value 1: 51.07%
+    Sensitive Value 0: 48.93%
+  Cluster 2:
+    Sensitive Value 1: 80.13%
+    Sensitive Value 0: 19.87%
 ```
 
 ---
 
-## Results
+## Results  
+The **scatter plot** visualizes the clustering output for 3 and 4 clusters of both algorithms, where `fairKMeans` aims to create clusters that respect fairness constraints, specifically regarding the sensitive feature (e.g., sex). The data points are reduced to two principal components for visualization purposes.  
+- Cluster assignment:  
+  - The clusters are labeled as 0, 1, and 2. Each cluster is represented by a distinct color on the scatter plot, distributed over the two PCA components.  
+  - In `fairKMeans`, clusters may slightly overlap or appear less distinct due to the fairness adjustments, as fairness constraints tend to pull points toward less biased distributions. This overlap may indicate trade-offs made to balance sensitive features.  
+  - Regular KMeans clusters are often more distinct and sharply defined, prioritizing within-cluster compactness.  
+- Dimensional Interpretation:
+  - The PCA components summarize high-dimensional data in two dimensions, capturing the largest variance directions but not necessarily corresponding to specific original features. This abstraction reveals how clustering decisions distribute points differently between methods.  
+- Fairness objective:  
+  - The `fairKMeans` clustering algorithm attempts to ensure that the distribution of sensitive feature values is equitable within each cluster. This fairness-aware clustering often leads to slightly altered cluster boundaries and overlapping regions compared to standard KMeans.  
+  - Regular KMeans prioritizes cluster compactness and separability but ignores fairness concerns entirely.
+- Other observations & implications:  
+  - Clusters from regular KMeans may show better separation along PCA dimensions but do not ensure any fairness in the sensitive feature distribution. This difference is key when comparing it to the FairKMeans results.  
+  - `FairKMeans` is suitable when equitable treatment of sensitive groups is critical, such as in hiring or loan approvals.
+  - Regular KMeans is better suited for tasks focused purely on accuracy or compactness, such as image compression or market segmentation.
+
+#### 3 clusters:
+![image](graphs/fair_kmeans_scatter_3.png)
+![image](graphs/regular_kmeans_scatter_3.png)
+
+#### 4 clusters:
+![image](graphs/fair_kmeans_scatter_4.png)
+![image](graphs/regular_kmeans_scatter_4.png)
+
+---
+
+The **bar chart** visualizes how the sensitive feature (e.g., sex) is distributed across clusters for both FairKMeans and Regular KMeans clustering:
+ - With `FairKMeans` each cluster contains a more proportional mix of sensitive values (e.g., "Sensitive Value 0" and "Sensitive Value 1"). While proportions vary slightly, no cluster overwhelmingly favors one sensitive value, which aligns with the fairness constraint. But we also need to consider number of clusters - the more clusters there are, the less proportionaly points will be clustered. That can be seen with 4 clusters already, where 1 cluster dominates more than others, while others still maintain fairness.  
+ - With regular Kmeans, Clusters 1 and 2 show balanced sensitive feature distributions, but Cluster 3 exhibits a strong bias, with one sensitive value dominating. The bias illustrates the disregard for sensitive feature proportions in the standard clustering approach.  
+
+#### 3 clusters:
+![image](graphs/fair_kmeans_bar_3.png)
+![image](graphs/regular_kmeans_bar_3.png)
+
+#### 4 clusters:
+![image](graphs/fair_kmeans_bar_4.png)
+![image](graphs/regular_kmeans_bar_4.png)
+
+---
+## Conclusion
 The `FairKMeans` algorithm demonstrates a critical balance between clustering fairness and quality. By enforcing fairness constraints during the clustering process, the algorithm ensures that sensitive groups are equitably represented across clusters. However, this fairness comes with trade-offs:  
 
 1. Fairness vs. Quality:  
