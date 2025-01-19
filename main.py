@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 from fairlearn.datasets import fetch_acs_income
 from collections import Counter
 
-n_clusters = 4
+n_clusters = 3
 
 # Preprocess the given dataset
 def process_dataset(X, sensitive_feature):
