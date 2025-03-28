@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from customFairKMeans import FairKMeans
+from strategies.customFairKMeans import FairKMeans
 from sklearn.cluster import KMeans
 from sklearn.model_selection import train_test_split
 
