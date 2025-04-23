@@ -101,7 +101,7 @@ if __name__ == "__main__":
 
     # Instantiate and fit the HarmonicKMeans model
     harmonic_kmeans = HarmonicKMeans(n_clusters, random_state=42)
-    harmonic_kmeans.fit(X_train)
+    harmonic_kmeans.fit(X_train, sf_train)
 
     # Predict and evaluate FairKMeans on test set
     fair_predictions = harmonic_kmeans.predict(X_test)
@@ -116,7 +116,7 @@ if __name__ == "__main__":
     regular_predictions = regular_kmeans.predict(X_test)
     regular_distribution = cluster_sensitive_distribution(regular_predictions, sf_test)
 
-    print("Sensitive Distribution (Harmonic Mean KMeans):")
+    print("Sensitive Distribution (Harmonic KMeans):")
     for cluster, data in fair_distribution.items():
         print(f"  Cluster {cluster}:")
         for sf_value, percentage in data["percentages"].items():

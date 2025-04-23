@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn.base import BaseEstimator, ClusterMixin
+from sklearn.utils.validation import check_array, check_is_fitted
 
 class HarmonicKMeans(BaseEstimator, ClusterMixin):
     def __init__(self, n_clusters=3, max_iters=300, random_state=42):
@@ -10,166 +11,84 @@ class HarmonicKMeans(BaseEstimator, ClusterMixin):
         self.centroids = None
         self.labels = None
 
-    def fit(self, X):
+    def fit(self, X, sensitive_feature):
         """
         Fits the K-Harmonic Means model to the data.
 
         Parameters:
         - X: Input data, shape (n_samples, n_features).
         """
-        # if self.random_state is not None:
-        #     np.random.seed(self.random_state)
+        # Ensures that X is a valid 2D array and that sensitive_feature is converted into a NumPy array for processing
+        X = check_array(X)
+        sensitive_feature = np.array(sensitive_feature)
 
-        # n_samples, n_features = X.shape
-        # random_indices = np.random.choice(n_samples, self.n_clusters, replace=False)
-        # self.centroids = X[random_indices].astype(float)                    # make sure the centroids are floats
-        # self.centroids += np.random.normal(0, 1e-6, self.centroids.shape)   # Add small noise
-        # empty_cluster_counts = [0] * self.n_clusters                        # Track empty cluster counts
+        # Check for consistent lengths
+        if len(X) != len(sensitive_feature):
+            raise ValueError("X and sensitive_feature must have the same length.")
 
-        # print("Initial Centroids:\n", self.centroids)   
-        # previous_centroids = self.centroids.copy()      
+        # Initialize centroids - Randomly selects n_clusters points from X to serve as the initial centroids
+        rng = np.random.RandomState(self.random_state)
+        indices = rng.choice(len(X), self.n_clusters, replace=False)
+        self.centroids = X[indices]
 
-        # for iteration in range(self.max_iters):
-        #     print(f"\nIteration {iteration + 1}")
-        #     distances = np.array([np.linalg.norm(X - centroid, axis=1) for centroid in self.centroids])
-        #     distances = distances.T
-
-        #     # Add a small epsilon to avoid division by zero
-        #     epsilon = 1e-10
-        #     distances = np.where(distances == 0, epsilon, distances)
-
-        #     harmonic_means = np.sum(1 / distances, axis=1)
-        #     weights = (1 / distances) / harmonic_means[:, np.newaxis]
-
-        #     # Normalize weights to avoid empty clusters (update: doesn't seem to work)
-        #     weights = weights / np.sum(weights, axis=1, keepdims=True)
-
-        #     new_centroids = np.zeros_like(self.centroids)
-        #     for k in range(self.n_clusters):
-        #         new_centroids[k] = np.sum(weights[:, k][:, np.newaxis] * X, axis=0) / np.sum(weights[:, k])
-
-        #     # --- Track progress ---
-        #     # distances = np.array([np.linalg.norm(X - centroid, axis=1) for centroid in self.centroids])
-        #     # distances = distances.T
-        #     cluster_assignments = np.argmin(distances, axis=1)
-        #     cluster_sizes = [np.sum(cluster_assignments == k) for k in range(self.n_clusters)]
-        #     print("Cluster Sizes:", cluster_sizes)
-            
-
-        #     # Check for empty clusters and re-initialize (dillema: empty clusters OR not reaching convergence)
-        #     # for k in range(self.n_clusters):
-        #     #     if cluster_sizes[k] == 0:
-        #     #         print(f"Cluster {k} is empty. Re-initializing.")
-        #     #         random_index = np.random.choice(n_samples)
-        #     #         new_centroids[k] = X[random_index]
-
-
-        #     # Check for empty clusters and re-initialize conditionally (update: when re-initializing one cluster, the other gets empty)
-        #     # for k in range(self.n_clusters):
-        #     #     if cluster_sizes[k] == 0:
-        #     #         empty_cluster_counts[k] += 1
-        #     #         if empty_cluster_counts[k] > 5:  # Re-initialize after 5 consecutive empty iterations
-        #     #             print(f"Cluster {k} is consistently empty. Re-initializing.")
-
-        #     #             # Local re-initialization
-        #     #             other_centroids = np.delete(new_centroids, k, axis=0)
-        #     #             distances_to_others = np.linalg.norm(X[:, np.newaxis] - other_centroids, axis=2)
-        #     #             min_distances = np.min(distances_to_others, axis=1)
-        #     #             random_index = np.random.choice(np.argsort(min_distances)[:10]) #pick one of the 10 closest points
-        #     #             new_centroids[k] = X[random_index]
-
-        #     #             empty_cluster_counts[k] = 0  # Reset count
-        #     #     else:
-        #     #         empty_cluster_counts[k] = 0  # Reset count if cluster is not empty
-
-
-        #     # Calculate centroid shifts
-        #     centroid_shift = np.linalg.norm(new_centroids - previous_centroids, axis=1)
-        #     print("Centroids Shift:", centroid_shift)
-        #     previous_centroids = new_centroids.copy() #update previous centroids
-
-        #     # Check if convergence is reached
-        #     if np.all(centroid_shift < self.tol):
-        #         print(f"Convergence reached after {iteration + 1} iterations.")
-        #         break
-
-        #     self.centroids = new_centroids
-
-        # self.labels = self.predict(X)
-        # return self
-
-
-
-
-        if self.random_state is not None:
-            np.random.seed(self.random_state)
-
-        # Randomly initialize centroids
-        n_samples, n_features = X.shape
-        random_indices = np.random.choice(n_samples, self.n_clusters, replace=False)
-        self.centroids = X[random_indices].astype(float)
-        self.centroids += np.random.normal(0, 1e-6, self.centroids.shape)
-
-        # Controids copy for calculating centroid shift
-        previous_centroids = self.centroids.copy()
+        # Initialize cluster assignments:
+        # - 'labels' stores the cluster assignment for each data point
+        # - 'prev_labels' stores the previous cluster assignment for each data point (for debugging purposes)
+        # - 'sensitive_counts' stores the counts of each sensitive feature value in each cluster
+        labels = np.zeros(X.shape[0], dtype=int)
+        prev_labels = labels.copy()
+        sensitive_counts = {i: {val: 0 for val in np.unique(sensitive_feature)} for i in range(self.n_clusters)}
 
         for iteration in range(self.max_iters):
-            print(f"\nIteration {iteration + 1}")
-            distances = np.array([np.sum((X - centroid)**2, axis=1) for centroid in self.centroids]) # the Squared Euclidean distances between each data point in X and each centroid
-            distances = distances.T                                     # distances from the i-th point to the k-th centroid
-            epsilon = 1e-10 
-            distances = np.where(distances == 0, epsilon, distances)    # replaces any zero distances with epsilon
+            print(f"\nITERATION {iteration + 1}")
 
-            # Calculate q_i_k using equation (7) from the paper 
-            q_values = np.zeros((n_samples, self.n_clusters))   # Initialize an array to store the q_i,k values
-            for i in range(n_samples):                          # Iterate over each data point
-                d_i = distances[i]                              # Distances from the i-th data point to all centroids
-                d_min_index = np.argmin(d_i)                    # Index of the closest centroid 
-                d_min = d_i[d_min_index]                        # Distance to the closest centroid
+            # Iterate over all data points and assign them to the closest cluster 
+            for i, data_point in enumerate(X):
+                distances = np.linalg.norm(self.centroids - data_point, axis=1)     # Compute the distance from data point to all centroids                
+                sorted_clusters = np.argsort(distances)                             # Sort clusters by distance                   
+                
+                for cluster in sorted_clusters:
+                    labels[i] = cluster
+                    sensitive_counts[cluster][sensitive_feature[i]] += 1
+                    break
 
-                for k in range(self.n_clusters):                # Iterate over each centroid
-                    ratios = d_min / d_i                        # Ratios of the minimum distance to all other distances 
-                    #print("Ratios:", ratios)    
-                    numerator = d_i[k]**4                       # Numerator of Equation 7 from the paper
-                    denominator = (d_i[k]**3) * (1 + np.sum(ratios[ratios != ratios[k]])) * \
-                                  (1 + np.sum(ratios**2))**2    # Denominator of Equation 7 from the paper
-                    q_values[i, k] = numerator / denominator if denominator != 0 else 0
-                    #print("q_i,k values:", q_values[i, k])
+            print(f"Sensitive feature distributions: {sensitive_counts}")
 
-            # Calculate q_i and p_i_k using equations (6.3-6.5) from the paper 
-            q_i = np.sum(q_values, axis=1)                      # Sum of q_i,k values for each data point
-            p_values = q_values / q_i[:, np.newaxis]            # Calculate p_i,k values (weights) by dividing each q_i,k by the corresponding q_i value
+            # Update centroids using Harmonic Mean
+            new_centroids = np.array([self._harmonic_mean(X[labels == i]) if np.any(labels == i) else self.centroids[i] for i in range(self.n_clusters)])
 
-            # Update centroids using equation (5) or (6.5) from the paper 
-            new_centroids = np.zeros_like(self.centroids)
-            for k in range(self.n_clusters):
-                new_centroids[k] = np.sum(p_values[:, k][:, np.newaxis] * X, axis=0)    # Calculate a weighted sum of the data points, where the weights are the p_i,k values
-                                                                                        # Each centroid is moved to the weighted "center" of the data points, 
-                                                                                        # where the weights are determined by the harmonic averages of the distances.
+            # Difference between previous and current cluster assignments
+            num_changes = np.sum(labels != prev_labels)
+            print(f"Points Changing Clusters: {num_changes}")
+            prev_labels = labels.copy()
 
-            # --- Added for investigation ---
-            # distances_calc = np.array([np.sum((X - centroid)**2, axis=1) for centroid in self.centroids])
-            # distances_calc = distances_calc.T
-            cluster_assignments = np.argmin(distances, axis=1)
-            cluster_sizes = [np.sum(cluster_assignments == k) for k in range(self.n_clusters)]
-            print("Cluster Sizes:", cluster_sizes)
-
-            # Calculate and print centroid shift
-            centroid_shift = np.linalg.norm(new_centroids - previous_centroids, axis=1)
-            previous_centroids = new_centroids.copy()
-            print("Centroid Shift:", centroid_shift)
-            # --- End of added section ---
-
-            # Check for convergence
-            if np.all(centroid_shift < self.tol):
-                print(f"Converged after {iteration + 1} iterations.")
+            centroid_shift = np.linalg.norm(self.centroids - new_centroids)
+            print(f"Centroid shift: {centroid_shift}")
+            
+            if centroid_shift < self.tol:
+                print("\nConvergence reached!\n")
                 break
-
             self.centroids = new_centroids
 
-        self.labels = self.predict(X)
-        return self
+    def _harmonic_mean(self, points):
+        if len(points) == 0:
+            return np.zeros(points.shape[1])
+        #print("points:", points)
+        #print("points.shape:", points.shape)
 
+        # Replace zeros with np.nan temporarily to avoid division by zero
+        with np.errstate(divide='ignore', invalid='ignore'):
+            reciprocal = 1 / points
+            reciprocal[points == 0] = np.nan  # avoid divide-by-zero issues
+            harmonic = len(points) / np.nansum(reciprocal, axis=0)
+
+        # Replace NaNs (in case all values were zero) with zero
+        har_mean = np.nan_to_num(harmonic, nan=0.0)
+        #har_mean = len(points) / np.sum(1 / points, axis=0)
+
+        print("har_mean for each feature:", har_mean)
+        return har_mean
+    
     def predict(self, X):
         """
         Predicts the cluster labels for the data.
