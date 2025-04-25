@@ -7,6 +7,7 @@ from strategies.sensitiveDivisionKMeans import SensitiveDivisionKMeans
 from collections import Counter
 
 n_clusters = 4  
+sensitive_feature_name = "SEX"
 
 def process_dataset(X, sensitive_feature):
     """
@@ -86,9 +87,9 @@ if __name__ == "__main__":
     X = pd.DataFrame(data.data, columns=data.feature_names)
 
     # Ensure 'SEX' column is present.
-    if 'SEX' in X.columns:
-        sensitive_feature = X["SEX"].values  # Extract the sensitive feature as a NumPy array
-        X = X.drop(columns=["SEX"]).values  # Drop the sensitive feature from the input data
+    if sensitive_feature_name in X.columns:
+        sensitive_feature = X[sensitive_feature_name].values    # Extract the sensitive feature as a NumPy array
+        X = X.drop(columns=[sensitive_feature_name]).values     # Drop the sensitive feature from the input data
     else:
         raise ValueError("The 'SEX' column is not found in the dataset.")
 
