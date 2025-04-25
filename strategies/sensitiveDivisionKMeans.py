@@ -37,32 +37,29 @@ class SensitiveDivisionKMeans(BaseEstimator, ClusterMixin):
             kmeans.fit(group_data[val])
             group_kmeans[val] = kmeans
 
-        # Step 3: Stack all centroids and match them optimally
-        print("Matching clusters across all groups...")
-        centroid_list = []
-        centroid_map = []  # To track which centroid belongs to which group and local cluster
-        labels_by_group = {}
+        # Step 3: Collect all centroids and track which group/cluster they came from
+        print("Combining and clustering all centroids from all groups...")
+        all_centroids = []
+        centroid_meta = []  # (group_val, cluster_index)
+        for val in unique_values:
+            for idx, centroid in enumerate(group_kmeans[val].cluster_centers_):
+                all_centroids.append(centroid)
+                centroid_meta.append((val, idx))
 
-        for val_idx, val in enumerate(unique_values):
-            centers = group_kmeans[val].cluster_centers_
-            centroid_list.extend(centers)
-            centroid_map.extend([(val, i) for i in range(len(centers))])
-            labels_by_group[val] = group_kmeans[val].labels_
+        all_centroids = np.array(all_centroids)
 
-        centroid_list = np.array(centroid_list)
+        # Step 4: Cluster the centroids into final n_clusters groups
+        centroid_clusterer = KMeans(n_clusters=self.n_clusters, random_state=self.random_state, n_init=10)
+        centroid_cluster_labels = centroid_clusterer.fit_predict(all_centroids)
 
-        # Step 4: Cluster centroids into final clusters (n_clusters overall clusters)
-        final_kmeans = KMeans(n_clusters=self.n_clusters, random_state=self.random_state, n_init='auto')
-        final_kmeans.fit(centroid_list)
-        print("Final centroid clustering complete. Mapping sub-clusters to global clusters...")
-
-        # Step 5: Assign new global labels to each point
+        # Step 5: Assign new global labels to each sample based on centroid matching
+        print("Assigning new labels to all original samples based on centroid clustering...")
         labels = np.empty(X.shape[0], dtype=int)
-        for idx, (group_val, local_cluster_idx) in enumerate(centroid_map):
-            global_cluster_label = final_kmeans.labels_[idx]
-            indices = group_indices[group_val][labels_by_group[group_val] == local_cluster_idx]
-            labels[indices] = global_cluster_label
-            print(f"  Group '{group_val}' cluster {local_cluster_idx} assigned to global cluster {global_cluster_label}")
+        for i, (group_val, local_idx) in enumerate(centroid_meta):
+            global_label = centroid_cluster_labels[i]
+            original_indices = group_indices[group_val][group_kmeans[group_val].labels_ == local_idx]
+            labels[original_indices] = global_label
+            print(f"  Group '{group_val}' cluster {local_idx} assigned to global cluster {global_label}")
 
         # Step 6: Calculate final cluster centroids based on full dataset
         print("Calculating final cluster centroids...")
