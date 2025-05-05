@@ -6,7 +6,7 @@ import numpy as np
 from strategies.sensitiveDivisionKMeans import SensitiveDivisionKMeans
 from collections import Counter
 
-n_clusters = 3
+n_clusters = 5
 sensitive_feature_name = "SEX"  # Optional values:
                                 # COW - Class of Worker
                                 # SCHL - School Enrollment
@@ -85,6 +85,30 @@ def cluster_sensitive_distribution(labels, sensitive_feature):
 
     return distribution
 
+def print_cluster_sensitive_distribution(distribution, clustring_method="Regular KMeans"):
+    """
+    Pretty-print the sensitive feature distribution as a table.
+    """
+    # Get all unique sensitive feature values across all clusters
+    all_sensitive_values = set()
+    for data in distribution.values():
+        all_sensitive_values.update(data["percentages"].keys())
+    all_sensitive_values = sorted(all_sensitive_values)
+
+    # Create a DataFrame with clusters as rows and sensitive feature values as columns
+    table_data = []
+    for cluster in sorted(distribution.keys()):
+        row = {"Cluster": cluster}
+        for val in all_sensitive_values:
+            row[val] = f"{distribution[cluster]['percentages'].get(val, 0):.2f}%"
+        table_data.append(row)
+
+    df = pd.DataFrame(table_data)
+    df.set_index("Cluster", inplace=True)
+    print(f'\nFeature Distribution ({clustring_method}):')
+    print(df.to_string())
+
+
 if __name__ == "__main__":
     # Fetch the ACSIncome dataset
     data = fetch_acs_income()
@@ -122,14 +146,18 @@ if __name__ == "__main__":
     regular_predictions = regular_kmeans.predict(X_test)
     regular_distribution = cluster_sensitive_distribution(regular_predictions, sf_test)
 
-    print("Sensitive Distribution (Sensitive Division KMeans):")
-    for cluster, data in fair_distribution.items():
-        print(f"  Cluster {cluster}:")
-        for sf_value, percentage in data["percentages"].items():
-            print(f"    Sensitive Value {sf_value}: {percentage:.2f}%")
+    print_cluster_sensitive_distribution(fair_distribution, "Sensitive Division KMeans")
+    print_cluster_sensitive_distribution(regular_distribution, "Regular KMeans")
 
-    print("\nSensitive Distribution (Regular KMeans):")
-    for cluster, data in regular_distribution.items():
-        print(f"  Cluster {cluster}:")
-        for sf_value, percentage in data["percentages"].items():
-            print(f"    Sensitive Value {sf_value}: {percentage:.2f}%")
+    # print("OLD WAY:\n\n")
+    # print("Sensitive Distribution (Sensitive Division KMeans):")
+    # for cluster, data in fair_distribution.items():
+    #     print(f"  Cluster {cluster}:")
+    #     for sf_value, percentage in data["percentages"].items():
+    #         print(f"    Sensitive Value {sf_value}: {percentage:.2f}%")
+
+    # print("\nSensitive Distribution (Regular KMeans):")
+    # for cluster, data in regular_distribution.items():
+    #     print(f"  Cluster {cluster}:")
+    #     for sf_value, percentage in data["percentages"].items():
+    #         print(f"    Sensitive Value {sf_value}: {percentage:.2f}%")

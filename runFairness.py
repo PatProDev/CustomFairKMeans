@@ -1,19 +1,27 @@
-import numpy as np
-import pandas as pd
+# Run script: python runFairness.py <strategy> <n_clusters> <sensitive_feature_name>
 
-from strategies.customFairKMeans import FairKMeans
+import sys
+import pandas as pd
+import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.model_selection import train_test_split
-
 from fairlearn.datasets import fetch_acs_income
 from collections import Counter
+from strategies.customFairKMeans import FairKMeans
+from strategies.harmonicKMeans import HarmonicKMeans
+from strategies.sensitiveDivisionKMeans import SensitiveDivisionKMeans
 
-import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
+# Default values for the parameters
+strategy_name = "Sensitive Division KMeans"
+kmeans_strategy = "Sen"  # Options: "Cus", "Har", "Sen"
+n_clusters = 5
+sensitive_feature_name = "SEX"  # Optional values:
+                                # COW - Class of Worker
+                                # SCHL - School Enrollment
+                                # MAR - Marital Status                                
+                                # SEX - Gender
+                                # RAC1P - Race                    
 
-n_clusters = 4
-
-# Preprocess the given dataset
 def process_dataset(X, sensitive_feature):
     """
     Encode all class values in X and sensitive_feature with numeric values and handle missing values.
@@ -108,42 +116,36 @@ def print_cluster_sensitive_distribution(distribution, clustring_method="Regular
     print(f'\nFeature Distribution ({clustring_method}):')
     print(df.to_string())
 
-# Bar chart to visualize the percentage distribution of sensitive groups within each cluster compared to the global proportion
-def plot_sensitive_distribution(distribution, title, filename):
-    clusters = sorted(distribution.keys())
-    sensitive_values = sorted(next(iter(distribution.values()))["percentages"].keys())
-    values_matrix = np.zeros((len(clusters), len(sensitive_values)))
-
-    for cluster in clusters:
-        for i, sf_value in enumerate(sensitive_values):
-            values_matrix[cluster, i] = distribution[cluster]["percentages"][sf_value]
-
-    x = np.arange(len(clusters))
-    width = 0.35
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    for i, sf_value in enumerate(sensitive_values):
-        ax.bar(x + i * width / len(sensitive_values), values_matrix[:, i], width / len(sensitive_values),
-                label=f"Sensitive Value {sf_value}")
-
-    ax.set_xlabel("Cluster")
-    ax.set_ylabel("Percentage")
-    ax.set_title(title)
-    ax.set_xticks(x + width / (2 * len(sensitive_values)))
-    ax.set_xticklabels([f"Cluster {c}" for c in clusters])
-    ax.legend()
-    plt.savefig(filename)
-    plt.close()
-
 
 if __name__ == "__main__":
-    # Fetch the ACSIncome dataset
-    data = fetch_acs_income()
 
-    # Convert the dataset to a DataFrame for easier column access
-    X = pd.DataFrame(data.data, columns=data.feature_names)
-    sensitive_feature = X["SEX"].values     # Extract the sensitive feature as a NumPy array
-    X = X.drop(columns=["SEX"]).values      # Drop the sensitive feature from the input data
+    if len(sys.argv) != 4:
+        print("USAGE: python runFairness.py <strategy> <num_of_clusters> <sensitive_feature_name>")
+        print("Strategy options:")
+        print("    Cus - Custom KMeans")
+        print("    Har - Harmonic KMeans")
+        print("    Sen - Sensitive Division KMeans")
+        print("Sensitive feature options:")
+        print("    COW - Class of Worker")
+        print("    SCHL - School Enrollment")
+        print("    MAR - Marital Status")
+        print("    SEX - Gender")
+        print("    RAC1P - Race")
+        sys.exit(1)
+
+    kmeans_strategy = sys.argv[1]
+    n_clusters = int(sys.argv[2])
+    sensitive_feature_name = sys.argv[3]
+
+    data = fetch_acs_income()                                 # Fetch the ACSIncome dataset
+    X = pd.DataFrame(data.data, columns=data.feature_names)   # Convert the dataset to a DataFrame for easier column access
+
+    # Ensure 'sensitive_feature_name' column is present
+    if sensitive_feature_name in X.columns:
+        sensitive_feature = X[sensitive_feature_name].values  # Extract the sensitive feature as a NumPy array
+        X = X.drop(columns=[sensitive_feature_name]).values   # Drop the sensitive feature from the input data
+    else:
+        raise ValueError(f"The '{sensitive_feature_name}' column is not found in the dataset.")
 
     X, sensitive_feature = process_dataset(X, sensitive_feature)
 
@@ -152,49 +154,44 @@ if __name__ == "__main__":
         X, sensitive_feature, test_size=0.2, random_state=42
     )
 
-
-    # Instantiate and fit the FairKMeans
-    fair_kmeans = FairKMeans(n_clusters, random_state=42)
-    fair_kmeans.fit(X_train, sf_train)
-
-    # Predict and evaluate FairKMeans on test set
-    fair_predictions = fair_kmeans.predict(X_test)
-    fair_distribution = cluster_sensitive_distribution(fair_predictions, sf_test)
-
-
     # Instantiate and fit the regular KMeans
-    regular_kmeans = KMeans(n_clusters, random_state=42)
+    regular_kmeans = KMeans(n_clusters, n_init='auto', random_state=42)
     regular_kmeans.fit(X_train)
 
     # Predict and evaluate KMeans on test set
     regular_predictions = regular_kmeans.predict(X_test)
     regular_distribution = cluster_sensitive_distribution(regular_predictions, sf_test)
 
-    print_cluster_sensitive_distribution(fair_distribution, "Custom KMeans")
+    match kmeans_strategy:
+        case "Cus":
+            strategy_name = "Custom KMeans"
+            # Instantiate and fit the FairKMeans
+            fair_kmeans = FairKMeans(n_clusters, random_state=42)
+            fair_kmeans.fit(X_train, sf_train)
+
+            # Predict and evaluate FairKMeans on test set
+            fair_predictions = fair_kmeans.predict(X_test)
+            fair_distribution = cluster_sensitive_distribution(fair_predictions, sf_test)
+
+        case "Har":
+            strategy_name = "Harmonic KMeans"
+            # Instantiate and fit the HarmonicKMeans model
+            harmonic_kmeans = HarmonicKMeans(n_clusters, random_state=42)
+            harmonic_kmeans.fit(X_train, sf_train)
+
+            # Predict and evaluate FairKMeans on test set
+            fair_predictions = harmonic_kmeans.predict(X_test)
+            fair_distribution = cluster_sensitive_distribution(fair_predictions, sf_test)
+
+        case "Sen":
+            strategy_name = "Sensitive Division KMeans"
+            # Instantiate and fit the SensitiveDivisionKMeans model
+            sensitive_divison_kmeans = SensitiveDivisionKMeans(n_clusters, random_state=42)
+            sensitive_divison_kmeans.fit(X_train, sf_train)
+
+            # Predict and evaluate FairKMeans on test set
+            fair_predictions = sensitive_divison_kmeans.predict(X_test)
+            fair_distribution = cluster_sensitive_distribution(fair_predictions, sf_test)
+
+    print_cluster_sensitive_distribution(fair_distribution, strategy_name)
     print_cluster_sensitive_distribution(regular_distribution, "Regular KMeans")
-   
-    # 1. Scatter Plot (Plotted test points colored by cluster assignment for both algorithms)
-    pca = PCA(n_components=2)
-    X_test_2D = pca.fit_transform(X_test)
-
-    plt.figure(figsize=(10, 6))
-    plt.scatter(X_test_2D[:, 0], X_test_2D[:, 1], c=fair_predictions, cmap="viridis", alpha=0.7, edgecolor="k")
-    plt.title("FairKMeans Clustering: Distribution Across Reduced Dimensions")
-    plt.xlabel("PCA Reduced Feature 1")
-    plt.ylabel("PCA Reduced Feature 2")
-    plt.colorbar(label="Assigned Cluster")
-    plt.savefig(f'graphs/fair_kmeans_scatter_{n_clusters}.png')
-    plt.close()
-
-    plt.figure(figsize=(10, 6))
-    plt.scatter(X_test_2D[:, 0], X_test_2D[:, 1], c=regular_predictions, cmap="viridis", alpha=0.7, edgecolor="k")
-    plt.title("Regular KMeans Clustering: Distribution Across Reduced Dimensions")
-    plt.xlabel("PCA Reduced Feature 1")
-    plt.ylabel("PCA Reduced Feature 2")
-    plt.colorbar(label="Assigned Cluster")
-    plt.savefig(f'graphs/regular_kmeans_scatter_{n_clusters}.png')
-    plt.close()
-
-    # 2. Bar Chart (Sensitive Distribution)
-    plot_sensitive_distribution(fair_distribution, "FairKMeans Sensitive Group Distribution", f'graphs/fair_kmeans_bar_{n_clusters}.png')
-    plot_sensitive_distribution(regular_distribution, "Regular KMeans Sensitive Group Distribution", f'graphs/regular_kmeans_bar_{n_clusters}.png')
