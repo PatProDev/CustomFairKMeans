@@ -52,21 +52,19 @@ class HarmonicKMeans(BaseEstimator, ClusterMixin):
                     sensitive_counts[cluster][sensitive_feature[i]] += 1
                     break
 
-            print(f"Sensitive feature distributions: {sensitive_counts}")
+            #print(f"Sensitive feature distributions: {sensitive_counts}")
 
             # Update centroids using Harmonic Mean
             new_centroids = np.array([self._harmonic_mean(X[labels == i]) if np.any(labels == i) else self.centroids[i] for i in range(self.n_clusters)])
 
             # Difference between previous and current cluster assignments
             num_changes = np.sum(labels != prev_labels)
-            print(f"Points Changing Clusters: {num_changes}")
             prev_labels = labels.copy()
-
             centroid_shift = np.linalg.norm(self.centroids - new_centroids)
-            print(f"Centroid shift: {centroid_shift}")
+            print(f"Centroid shift: {centroid_shift} | Points Changing Clusters: {num_changes}")
             
             if centroid_shift < self.tol:
-                print("\nConvergence reached!\n")
+                print("\n========= Convergence reached! =========")
                 break
             self.centroids = new_centroids
 
@@ -86,7 +84,7 @@ class HarmonicKMeans(BaseEstimator, ClusterMixin):
         har_mean = np.nan_to_num(harmonic, nan=0.0)
         #har_mean = len(points) / np.sum(1 / points, axis=0)
 
-        print("har_mean for each feature:", har_mean)
+        #print("har_mean for each feature:", har_mean)
         return har_mean
     
     def predict(self, X):

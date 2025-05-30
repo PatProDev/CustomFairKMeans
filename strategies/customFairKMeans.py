@@ -10,7 +10,7 @@ class FairKMeans(BaseEstimator, ClusterMixin):
         self.random_state = random_state    # random seed for reproducibility
         self.fairness_tolerance = 0.07      # maximum allowed difference between the ratio of a sensitive group in a cluster and the global ratio
 
-    def fit(self, X, sensitive_feature):
+    def fit(self, X, sensitive_feature, global_ratios=None):
         """
         Fit the model to the data X with fairness constraints based on the sensitive feature.
 
@@ -28,13 +28,6 @@ class FairKMeans(BaseEstimator, ClusterMixin):
         if len(X) != len(sensitive_feature):
             raise ValueError("X and sensitive_feature must have the same length.")
 
-        # Calculate the global ratio of each sensitive feature value
-        global_ratios = {
-            value: np.sum(sensitive_feature == value) / len(sensitive_feature)
-            for value in np.unique(sensitive_feature)
-        }
-        print("Global Ratios:", global_ratios)
-
         # Initialize centroids - Randomly selects n_clusters points from X to serve as the initial centroids
         rng = np.random.RandomState(self.random_state)
         indices = rng.choice(len(X), self.n_clusters, replace=False)
@@ -49,7 +42,7 @@ class FairKMeans(BaseEstimator, ClusterMixin):
         sensitive_counts = {i: {val: 0 for val in np.unique(sensitive_feature)} for i in range(self.n_clusters)}
 
         for iteration in range(self.max_iter):
-            print(f"\nIteration {iteration + 1}")
+            print(f"\nITERATION {iteration + 1}")
 
             # Iterate over all data points and assign them to the closest cluster with fairness
             for i, sample in enumerate(X):
@@ -103,7 +96,7 @@ class FairKMeans(BaseEstimator, ClusterMixin):
             # Check for convergence:
             # - if the change in centroids is less than the tolerance (tol), the algorithm stops
             if centroid_shift < self.tol:
-                print("\nConvergence reached.")
+                print("\n========= Convergence reached! =========")
                 break
             self.cluster_centers_ = new_centroids
 

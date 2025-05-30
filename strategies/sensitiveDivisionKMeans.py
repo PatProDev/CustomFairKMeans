@@ -19,7 +19,7 @@ class SensitiveDivisionKMeans(BaseEstimator, ClusterMixin):
             raise ValueError("X and sensitive_feature must have the same length.")
 
         # Step 1: Separate data in groups by sensitive feature values
-        print("Separating data by sensitive feature values...")
+        print("Separating data by sensitive feature groups...")
         unique_values = np.unique(sensitive_feature)
         group_data = {}
         group_indices = {}
@@ -51,6 +51,16 @@ class SensitiveDivisionKMeans(BaseEstimator, ClusterMixin):
         # Step 4: Cluster the centroids into final n_clusters groups
         centroid_clusterer = KMeans(n_clusters=self.n_clusters, random_state=self.random_state, n_init=10)
         centroid_cluster_labels = centroid_clusterer.fit_predict(all_centroids)
+        
+        # Step 4.5: Analyze group composition of final centroid clusters
+        print("Analyzing group composition of final centroid clusters...")
+        group_cluster_map = {i: set() for i in range(self.n_clusters)}
+        for i, (group_val, _) in enumerate(centroid_meta):
+            global_cluster = centroid_cluster_labels[i]
+            group_cluster_map[global_cluster].add(group_val)
+        for cluster_id, group_vals in group_cluster_map.items():
+            group_list = ', '.join(str(val) for val in group_vals)
+            print(f"  Final cluster {cluster_id} contains centroids from group(s): {group_list}")
 
         # Step 5: Assign new global labels to each sample based on centroid matching
         print("Assigning new labels to all original samples based on centroid clustering...")
