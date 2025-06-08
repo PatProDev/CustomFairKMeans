@@ -11,11 +11,11 @@ from collections import Counter
 from strategies.customFairKMeans import FairKMeans
 from strategies.harmonicKMeans import HarmonicKMeans
 from strategies.sensitiveDivisionKMeans import SensitiveDivisionKMeans
-from strategies.silhouetteDbiKMeans import SilhouetteDbiKMeans
+from strategies.metricDrivenKMeans import MetricDrivenKMeans
 
 # Default values for the parameters
 strategy_name = "Sensitive Division KMeans"
-kmeans_strategy = "Sen"         # Options: "Cus", "Har", "Sen", "Sil"
+kmeans_strategy = "Sen"         # Options: "Cus", "Har", "Sen", "Sil", "Dbi"
 n_clusters = 5
 sensitive_feature_name = "SEX"  # Options:
                                 # COW - Class of Worker
@@ -34,6 +34,7 @@ def print_usage():
     print("    Har - Harmonic KMeans")
     print("    Sen - Sensitive Division KMeans")
     print("    Sil - Silhouette Score KMeans")
+    print("    Sil - Davis-Bouldin Index KMeans")
     print("Sensitive feature options:")
     print("    COW - Class of Worker")
     print("    SCHL - School Enrollment")
@@ -221,11 +222,21 @@ def run_strategy(kmeans_strategy):
         case "Sil":
             strategy_name = "Silhouette Score KMeans"    
             # Instantiate and fit the SilhouetteDbiKMeans model
-            silhouette_kmeans = SilhouetteDbiKMeans(n_clusters, random_state=42)
-            silhouette_kmeans.fit(X_train, sf_train)
+            silhouette_kmeans = MetricDrivenKMeans(n_clusters, use_dbi=False, score_threshold=0.5, random_state=42)
+            silhouette_kmeans.fit(X_train)
 
             # Predict and evaluate SilhouetteDbiKMeans on test set
             fair_predictions = silhouette_kmeans.predict(X_test)
+            fair_distribution = calculate_cluster_sensitive_distribution(fair_predictions, sf_test)
+
+        case "Dbi":
+            strategy_name = "Davies-Bouldin Index KMeans"    
+            # Instantiate and fit the SilhouetteDbiKMeans model
+            dbi_kmeans = MetricDrivenKMeans(n_clusters, use_dbi=True, score_threshold=0.5, random_state=42)
+            dbi_kmeans.fit(X_train)
+
+            # Predict and evaluate SilhouetteDbiKMeans on test set
+            fair_predictions = dbi_kmeans.predict(X_test)
             fair_distribution = calculate_cluster_sensitive_distribution(fair_predictions, sf_test)   
     
     return fair_distribution, fair_predictions, strategy_name

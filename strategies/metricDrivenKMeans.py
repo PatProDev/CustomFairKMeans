@@ -1,0 +1,135 @@
+import numpy as np
+from sklearn.base import BaseEstimator, ClusterMixin
+from sklearn.utils.validation import check_array, check_is_fitted
+from sklearn.metrics import pairwise_distances, silhouette_score, davies_bouldin_score
+
+class MetricDrivenKMeans(BaseEstimator, ClusterMixin):
+    def __init__(self, n_clusters=3, max_iter=100, tol=1e-4, random_state=42,
+                 score_threshold=0.5, sample_size=10000, use_dbi=False):
+        self.n_clusters = n_clusters
+        self.max_iter = max_iter
+        self.tol = tol
+        self.random_state = random_state
+        # A "good" silhouette score is higher: 
+        #       - Scores between 0.25 and 0.5 are considered acceptable, while those above 0.5 suggest a good clustering result.
+        # A "good" DBI score is lower:
+        #       - Values below 0.5 indicating well-separated clusters.
+        self.score_threshold = score_threshold
+        # When calling sklearn silhouette_score, we sample a subset of the data to speed up the computation, especially for large datasets.
+        self.sample_size = sample_size
+        # Incidate whether to use silhouette score or Davies-Bouldin Index (DBI) for clustering quality assessment.
+        self.use_dbi = use_dbi
+    
+    # ------------------------------------------------------------------
+    #                           HELPER METHODS
+    # ------------------------------------------------------------------
+    def _approx_silhouette_for_point(self, dists, label):
+        a = dists[label]
+        b = np.min(np.delete(dists, label))
+        return 0.0 if max(a, b) == 0 else (b - a) / max(a, b)       
+
+    def _initialize_labels_with_dbi(self, X, d2c):
+        # Fast: assign each point to its closest centroid (like KMeans step)
+        labels = np.argmin(d2c, axis=1)
+        return labels
+
+    def _initialize_labels_with_silhouette(self, X, labels, d2c):
+        n_samples = X.shape[0]
+        for i in range(n_samples):
+            best_label = labels[i]
+            best_silhouette = self._approx_silhouette_for_point(d2c[i], best_label)
+            #print(f"  Point {i}: Initial silhouette: {best_silhouette:.4f}")
+            for c in range(self.n_clusters):
+                if c == labels[i]:
+                    continue
+                old_label = labels[i]
+                labels[i] = c
+                temp_silhouette = self._approx_silhouette_for_point(d2c[i], c)
+                #print(f"  Point {i}: Testing cluster {c} gives silhouette: {temp_silhouette:.4f}")
+                if temp_silhouette > best_silhouette:
+                    best_silhouette = temp_silhouette
+                    best_label = c
+                labels[i] = old_label
+            labels[i] = best_label
+        return labels
+
+    # ------------------------------------------------------------------
+    #                           FIT METHOD
+    # ------------------------------------------------------------------
+    def fit(self, X):
+        X = check_array(X)
+        n_samples, _ = X.shape
+        rng = np.random.RandomState(self.random_state)
+
+        # 1) random initial centroids
+        self.cluster_centers_ = X[rng.choice(n_samples, self.n_clusters, replace=False)]
+        # initial labels by nearest centroid
+        d2c = pairwise_distances(X, self.cluster_centers_)
+        labels = np.argmin(d2c, axis=1)
+
+        for it in range(1, self.max_iter + 1):
+            print(f"\nITERATION {it}")
+            labels_prev = labels.copy()
+
+            # 2) Initialization:
+            #       - fast KMeans-like assignment if using DBI (it's a global score, and the fast version works perfectly well if we just re-assign to nearest centroid)
+            #       - greedy per-point reassignment to improve Silhouette (improves Silhouette locally)
+            if self.use_dbi:
+                labels = self._initialize_labels_with_dbi(X, d2c)
+            else:
+                labels = self._initialize_labels_with_silhouette(X, labels, d2c)   
+
+            # 3) Update centroids and point‑to‑centroid distances
+            new_centroids = np.vstack([
+                X[labels == c].mean(axis=0) if np.any(labels == c) else self.cluster_centers_[c]
+                for c in range(self.n_clusters)
+            ])
+            centroid_shift = np.linalg.norm(self.cluster_centers_ - new_centroids)
+            self.cluster_centers_ = new_centroids
+            d2c = pairwise_distances(X, self.cluster_centers_)
+
+            # 4) Global silhouette or DBI (sampled for speed)
+            if len(np.unique(labels)) > 1:
+                sample = min(self.sample_size, n_samples)
+                sample_idx = rng.choice(n_samples, sample, replace=False)
+                if self.use_dbi:
+                    score = davies_bouldin_score(X[sample_idx], labels[sample_idx])
+                    print(f"  Centroid shift: {centroid_shift:.6f} | Global DBI (sampled): {score:.3f}")
+                else:
+                    score = silhouette_score(X[sample_idx], labels[sample_idx])
+                    print(f"  Centroid shift: {centroid_shift:.6f} | Global Silhouette (sampled): {score:.3f}")
+            else:
+                score = float('inf') if self.use_dbi else 0.0
+
+            # 5) Stopping criteria 1.0 for centroid stabilization and score threshold
+            if centroid_shift < self.tol:
+                if (self.use_dbi and score <= self.score_threshold) or \
+                (not self.use_dbi and score >= self.score_threshold):
+                    print("  \nConvergence reached! Centroids stabilized & score threshold met.")
+                    break
+                else:
+                    print("  \nConvergence reached! Centroids stabilized, but score threshold not met...")
+                    break
+            else:
+                if (self.use_dbi and score <= self.score_threshold) or \
+                (not self.use_dbi and score >= self.score_threshold):
+                    print("  Score threshold met but centroids still moving - continuing to refine...")
+            
+            # 5) Stopping criteria 2.0 for no label changes
+            if np.array_equal(labels, labels_prev):
+                if (self.use_dbi and score <= self.score_threshold) or \
+                   (not self.use_dbi and score >= self.score_threshold):
+                    print("  No label changes and score threshold met; stopping.")
+                    break
+                else:
+                    print("  Warning: no label changes but score threshold not satisfied. Refining...")
+
+        self.labels_ = labels
+        return self
+    
+    
+    def predict(self, X):
+        check_is_fitted(self, 'cluster_centers_')
+        X = check_array(X)
+        distances = pairwise_distances(X, self.cluster_centers_)
+        return np.argmin(distances, axis=1)
