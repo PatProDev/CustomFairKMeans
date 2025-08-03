@@ -62,11 +62,12 @@ class HarmonicKMeans(BaseEstimator, ClusterMixin):
             prev_labels = labels.copy()
             centroid_shift = np.linalg.norm(self.centroids - new_centroids)
             print(f"Centroid shift: {centroid_shift} | Points Changing Clusters: {num_changes}")
-            
+            self.centroids = new_centroids
+
             if centroid_shift < self.tol:
                 print("\n========= Convergence reached! =========")
-                break
-            self.centroids = new_centroids
+                break          
+
 
     def _harmonic_mean(self, points):
         if len(points) == 0:
