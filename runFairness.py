@@ -1,5 +1,5 @@
-# Run script: python runFairness.py <strategy> <n_clusters> <sensitive_feature_name>
-
+# Run script: python runFairness.py <dataset> <strategy> <n_clusters> <sensitive_feature_name>
+# Example usage: python runFairness.py Asc Sil 3 SEX
 import sys
 import pandas as pd
 import numpy as np
@@ -11,12 +11,15 @@ from collections import Counter
 from strategies.customFairKMeans import FairKMeans
 from strategies.harmonicKMeans import HarmonicKMeans
 from strategies.sensitiveDivisionKMeans import SensitiveDivisionKMeans
-from strategies.metricDrivenKMeans import MetricDrivenKMeans
+#from strategies.metricDrivenKMeans import MetricDrivenKMeans
+from strategies.silhouetteDbiKMeans import SilhouetteDbiKMeans
+import time
 
 # Default values for the parameters
 strategy_name = "Sensitive Division KMeans"
 kmeans_strategy = "Sen"         # Options: "Cus", "Har", "Sen", "Sil", "Dbi"
 n_clusters = 5
+dataset = "Asc"                 # Options: "Asc", "Sin"
 sensitive_feature_name = "SEX"  # Options:
                                 # COW - Class of Worker
                                 # SCHL - School Enrollment
@@ -25,22 +28,22 @@ sensitive_feature_name = "SEX"  # Options:
                                 # RAC1P - Race                    
 
 def print_usage():
-    """
-    Print the usage instructions for the script.
-    """
-    print("USAGE: python runFairness.py <strategy> <num_of_clusters> <sensitive_feature_name>")
+    print("USAGE: python runFairness.py <dataset> <strategy> <num_of_clusters> <sensitive_feature_name>")
+    print("Dataset options:")
+    print("    Asc - ACS Income Dataset")
+    print("    Sin - Synthetic Dataset")
     print("Strategy options:")
     print("    Cus - Custom KMeans")
     print("    Har - Harmonic KMeans")
     print("    Sen - Sensitive Division KMeans")
     print("    Sil - Silhouette Score KMeans")
-    print("    Sil - Davis-Bouldin Index KMeans")
+    print("    Dbi - Davis-Bouldin Index KMeans")
     print("Sensitive feature options:")
     print("    COW - Class of Worker")
     print("    SCHL - School Enrollment")
     print("    MAR - Marital Status")
     print("    SEX - Gender")
-    print("    RAC1P - Race")
+    print("    RAC1P - Race")   
 
 def process_dataset(X, sensitive_feature):
     """
@@ -222,7 +225,8 @@ def run_strategy(kmeans_strategy):
         case "Sil":
             strategy_name = "Silhouette Score KMeans"    
             # Instantiate and fit the SilhouetteDbiKMeans model
-            silhouette_kmeans = MetricDrivenKMeans(n_clusters, use_dbi=False, score_threshold=0.5, random_state=42)
+            # silhouette_kmeans = MetricDrivenKMeans(n_clusters, use_dbi=False, score_threshold=0.5, random_state=42)
+            silhouette_kmeans = SilhouetteDbiKMeans(n_clusters, use_dbi=False, score_threshold=0.6, random_state=42)
             silhouette_kmeans.fit(X_train)
 
             # Predict and evaluate SilhouetteDbiKMeans on test set
@@ -232,7 +236,8 @@ def run_strategy(kmeans_strategy):
         case "Dbi":
             strategy_name = "Davies-Bouldin Index KMeans"    
             # Instantiate and fit the SilhouetteDbiKMeans model
-            dbi_kmeans = MetricDrivenKMeans(n_clusters, use_dbi=True, score_threshold=0.5, random_state=42)
+            #dbi_kmeans = MetricDrivenKMeans(n_clusters, use_dbi=True, score_threshold=0.5, random_state=42)
+            dbi_kmeans = SilhouetteDbiKMeans(n_clusters, use_dbi=True, score_threshold=0.5, random_state=42)
             dbi_kmeans.fit(X_train)
 
             # Predict and evaluate SilhouetteDbiKMeans on test set
@@ -290,28 +295,31 @@ def evaluate_clustering(X, labels, name="Clustering", sample_size=10000, random_
 
 if __name__ == "__main__":
 
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 5:
         print_usage()
         sys.exit(1)
 
     # Read command line arguments
-    kmeans_strategy = sys.argv[1]
-    n_clusters = int(sys.argv[2])
-    sensitive_feature_name = sys.argv[3]
+    dataset = sys.argv[1]
+    kmeans_strategy = sys.argv[2]
+    n_clusters = int(sys.argv[3])
+    sensitive_feature_name = sys.argv[4]
 
-    # Fetch the ACSIncome dataset
-    data = fetch_acs_income()
-    # Convert the dataset to a DataFrame for easier column access                                 
-    X = pd.DataFrame(data.data, columns=data.feature_names)   
+    if dataset == "Asc":
+        data = fetch_acs_income()
+        df = pd.DataFrame(data.data, columns=data.feature_names)
+    elif dataset == "Sin":
+        df = pd.read_csv("synthetic_data/synthetic_equal_odds(in).csv")
+    else:
+        raise ValueError(f"Unknown dataset: {dataset}")
 
     # Ensure 'sensitive_feature_name' column is present
-    if sensitive_feature_name in X.columns:
-         # Extract the sensitive feature as a NumPy array
-        sensitive_feature = X[sensitive_feature_name].values
-        # Drop the sensitive feature from the input data 
-        X = X.drop(columns=[sensitive_feature_name]).values   
-    else:
+    if sensitive_feature_name not in df.columns:
         raise ValueError(f"The '{sensitive_feature_name}' column is not found in the dataset.")
+
+    # Extract sensitive feature and remove it from features
+    sensitive_feature = df[sensitive_feature_name].values
+    X = df.drop(columns=[sensitive_feature_name]).values
 
     X, sensitive_feature = process_dataset(X, sensitive_feature)
 
@@ -331,7 +339,9 @@ if __name__ == "__main__":
     regular_predictions = regular_kmeans.predict(X_test)
     regular_distribution = calculate_cluster_sensitive_distribution(regular_predictions, sf_test)
 
+    start_time = time.time()                    
     fair_distribution, fair_predictions, strategy_name = run_strategy(kmeans_strategy)  	       
+    print("Time taken: %s seconds" % (time.time() - start_time))
 
     print_global_ratios(global_ratios, sensitive_feature_name)
     print_cluster_sensitive_distribution(fair_distribution, strategy_name)

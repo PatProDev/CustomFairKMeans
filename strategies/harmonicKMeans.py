@@ -11,63 +11,112 @@ class HarmonicKMeans(BaseEstimator, ClusterMixin):
         self.centroids = None
         self.labels = None
 
-    def fit(self, X, sensitive_feature):
-        """
-        Fits the K-Harmonic Means model to the data.
+    # def fit(self, X, sensitive_feature):
+    #     """
+    #     Fits the K-Harmonic Means model to the data.
 
-        Parameters:
-        - X: Input data, shape (n_samples, n_features).
-        """
-        # Ensures that X is a valid 2D array and that sensitive_feature is converted into a NumPy array for processing
+    #     Parameters:
+    #     - X: Input data, shape (n_samples, n_features).
+    #     """
+    #     # Ensures that X is a valid 2D array and that sensitive_feature is converted into a NumPy array for processing
+    #     X = check_array(X)
+    #     sensitive_feature = np.array(sensitive_feature)
+
+    #     # Check for consistent lengths
+    #     if len(X) != len(sensitive_feature):
+    #         raise ValueError("X and sensitive_feature must have the same length.")
+
+    #     # Initialize centroids - Randomly selects n_clusters points from X to serve as the initial centroids
+    #     rng = np.random.RandomState(self.random_state)
+    #     indices = rng.choice(len(X), self.n_clusters, replace=False)
+    #     self.centroids = X[indices]
+
+    #     # Initialize cluster assignments:
+    #     # - 'labels' stores the cluster assignment for each data point
+    #     # - 'prev_labels' stores the previous cluster assignment for each data point (for debugging purposes)
+    #     # - 'sensitive_counts' stores the counts of each sensitive feature value in each cluster
+    #     labels = np.zeros(X.shape[0], dtype=int)
+    #     prev_labels = labels.copy()
+    #     sensitive_counts = {i: {val: 0 for val in np.unique(sensitive_feature)} for i in range(self.n_clusters)}
+
+    #     for iteration in range(self.max_iters):
+    #         print(f"\nITERATION {iteration + 1}")
+
+    #         # Iterate over all data points and assign them to the closest cluster 
+    #         for i, data_point in enumerate(X):
+    #             distances = np.linalg.norm(self.centroids - data_point, axis=1)     # Compute the distance from data point to all centroids                
+    #             sorted_clusters = np.argsort(distances)                             # Sort clusters by distance                   
+                
+    #             for cluster in sorted_clusters:
+    #                 labels[i] = cluster
+    #                 sensitive_counts[cluster][sensitive_feature[i]] += 1
+    #                 break
+
+    #         # Update centroids using Harmonic Mean
+    #         new_centroids = np.array([self._harmonic_mean(X[labels == i]) if np.any(labels == i) else self.centroids[i] for i in range(self.n_clusters)])
+
+    #         # Difference between previous and current cluster assignments
+    #         num_changes = np.sum(labels != prev_labels)
+    #         prev_labels = labels.copy()
+    #         centroid_shift = np.linalg.norm(self.centroids - new_centroids)
+    #         print(f"Centroid shift: {centroid_shift} | Points Changing Clusters: {num_changes}")
+    #         self.centroids = new_centroids
+
+    #         if centroid_shift < self.tol:
+    #             print("\n========= Convergence reached! =========")
+    #             break          
+
+    def fit(self, X, sensitive_feature):
         X = check_array(X)
         sensitive_feature = np.array(sensitive_feature)
 
-        # Check for consistent lengths
         if len(X) != len(sensitive_feature):
             raise ValueError("X and sensitive_feature must have the same length.")
 
-        # Initialize centroids - Randomly selects n_clusters points from X to serve as the initial centroids
         rng = np.random.RandomState(self.random_state)
         indices = rng.choice(len(X), self.n_clusters, replace=False)
         self.centroids = X[indices]
 
-        # Initialize cluster assignments:
-        # - 'labels' stores the cluster assignment for each data point
-        # - 'prev_labels' stores the previous cluster assignment for each data point (for debugging purposes)
-        # - 'sensitive_counts' stores the counts of each sensitive feature value in each cluster
         labels = np.zeros(X.shape[0], dtype=int)
         prev_labels = labels.copy()
-        sensitive_counts = {i: {val: 0 for val in np.unique(sensitive_feature)} for i in range(self.n_clusters)}
 
         for iteration in range(self.max_iters):
             print(f"\nITERATION {iteration + 1}")
 
-            # Iterate over all data points and assign them to the closest cluster 
-            for i, data_point in enumerate(X):
-                distances = np.linalg.norm(self.centroids - data_point, axis=1)     # Compute the distance from data point to all centroids                
-                sorted_clusters = np.argsort(distances)                             # Sort clusters by distance                   
-                
-                for cluster in sorted_clusters:
-                    labels[i] = cluster
-                    sensitive_counts[cluster][sensitive_feature[i]] += 1
-                    break
+            # Reset sensitive counts each iteration
+            sensitive_counts = {i: {val: 0 for val in np.unique(sensitive_feature)} for i in range(self.n_clusters)}
 
-            #print(f"Sensitive feature distributions: {sensitive_counts}")
+            # Assign each point to nearest centroid
+            distances = np.linalg.norm(X[:, None, :] - self.centroids[None, :, :], axis=2)
+            labels = np.argmin(distances, axis=1)
 
-            # Update centroids using Harmonic Mean
-            new_centroids = np.array([self._harmonic_mean(X[labels == i]) if np.any(labels == i) else self.centroids[i] for i in range(self.n_clusters)])
+            # Update sensitive counts
+            for idx, label in enumerate(labels):
+                sensitive_counts[label][sensitive_feature[idx]] += 1
 
-            # Difference between previous and current cluster assignments
+            # Update centroids
+            new_centroids = []
+            for i in range(self.n_clusters):
+                if np.any(labels == i):
+                    new_centroids.append(self._harmonic_mean(X[labels == i]))
+                else:
+                    print(f"⚠️ Cluster {i} is empty — keeping previous centroid")
+                    new_centroids.append(self.centroids[i])
+            new_centroids = np.array(new_centroids)
+            new_centroids = np.nan_to_num(new_centroids, nan=0.0, posinf=1e9, neginf=-1e9)
+
+            # Compute changes
+            centroid_shift = np.linalg.norm(self.centroids - new_centroids)
             num_changes = np.sum(labels != prev_labels)
             prev_labels = labels.copy()
-            centroid_shift = np.linalg.norm(self.centroids - new_centroids)
+
             print(f"Centroid shift: {centroid_shift} | Points Changing Clusters: {num_changes}")
+
             self.centroids = new_centroids
 
             if centroid_shift < self.tol:
                 print("\n========= Convergence reached! =========")
-                break          
-
+                break
 
     def _harmonic_mean(self, points):
         if len(points) == 0:

@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.base import BaseEstimator, ClusterMixin
 from sklearn.utils.validation import check_array, check_is_fitted
 from sklearn.metrics import pairwise_distances, silhouette_score, davies_bouldin_score
+import time
 
 class MetricDrivenKMeans(BaseEstimator, ClusterMixin):
     def __init__(self, n_clusters=3, max_iter=100, tol=1e-4, random_state=42,
@@ -23,16 +24,70 @@ class MetricDrivenKMeans(BaseEstimator, ClusterMixin):
     # ------------------------------------------------------------------
     #                           HELPER METHODS
     # ------------------------------------------------------------------
+  
+    # def _initialize_labels_with_dbi(self, X, d2c):
+    #     # Fast: assign each point to its closest centroid (like KMeans step)
+    #     labels = np.argmin(d2c, axis=1)
+    #     return labels
+
+    def _initialize_labels_with_dbi(self, X, d2c, sample_limit=500, top_n_centroids=2):
+        """
+        Semi-greedy DBI: instead of the classic assignment to the nearest centroid, 
+        a few points are checked to see if it makes sense to move them relative to the DBI.
+
+        Parameters:
+        - X: ndarray, input data
+        - d2c: ndarray, distances to centroids
+        - sample_limit: int, max number of worst points to examine
+        - top_n_centroids: int, how many candidate centroids to try per point
+
+        Returns:
+        - labels: ndarray, reassigned cluster labels
+        """
+        print("Initializing labels with semi-greedy DBI...")
+
+        n_samples = X.shape[0]
+        labels = np.argmin(d2c, axis=1)
+        current_score = davies_bouldin_score(X, labels)
+
+        # 1. Identify worst points based on distance to their assigned centroid
+        cluster_dists = d2c[np.arange(n_samples), labels]
+        worst_indices = np.argsort(cluster_dists)[-sample_limit:]
+
+        print(f"Selected {len(worst_indices)} worst points for DBI reassignment")
+
+        for idx in worst_indices:
+            #print(f"  Point {idx}: Current label: {labels[idx]}, Distance to centroid: {cluster_dists[idx]:.4f}")
+            current_cluster = labels[idx]
+            sorted_clusters = np.argsort(d2c[idx])
+            candidate_clusters = [c for c in sorted_clusters if c != current_cluster][:top_n_centroids]
+
+            best_score = current_score
+            best_label = current_cluster
+
+            for new_cluster in candidate_clusters:
+                temp_labels = labels.copy()
+                temp_labels[idx] = new_cluster
+
+                # Recalculate DBI
+                try:
+                    new_score = davies_bouldin_score(X, temp_labels)
+                except:
+                    continue  # Skip if invalid clustering (e.g., empty cluster)
+
+                if new_score < best_score:
+                    best_score = new_score
+                    best_label = new_cluster
+
+            labels[idx] = best_label
+
+        return labels
+
     def _approx_silhouette_for_point(self, dists, label):
         a = dists[label]
         b = np.min(np.delete(dists, label))
-        return 0.0 if max(a, b) == 0 else (b - a) / max(a, b)       
-
-    def _initialize_labels_with_dbi(self, X, d2c):
-        # Fast: assign each point to its closest centroid (like KMeans step)
-        labels = np.argmin(d2c, axis=1)
-        return labels
-
+        return 0.0 if max(a, b) == 0 else (b - a) / max(a, b)   
+      
     def _initialize_labels_with_silhouette(self, X, labels, d2c):
         n_samples = X.shape[0]
         for i in range(n_samples):
@@ -69,6 +124,7 @@ class MetricDrivenKMeans(BaseEstimator, ClusterMixin):
 
         for it in range(1, self.max_iter + 1):
             print(f"\nITERATION {it}")
+            start_time = time.time()
             labels_prev = labels.copy()
 
             # 2) Initialization:
@@ -76,6 +132,7 @@ class MetricDrivenKMeans(BaseEstimator, ClusterMixin):
             #       - greedy per-point reassignment to improve Silhouette (improves Silhouette locally)
             if self.use_dbi:
                 labels = self._initialize_labels_with_dbi(X, d2c)
+                #labels = self._initialize_labels_with_dbi_cluster_level(X, labels, self.cluster_centers_)
             else:
                 labels = self._initialize_labels_with_silhouette(X, labels, d2c)   
 
@@ -123,6 +180,8 @@ class MetricDrivenKMeans(BaseEstimator, ClusterMixin):
                     break
                 else:
                     print("  Warning: no label changes but score threshold not satisfied. Refining...")
+
+            print("Time taken: %s seconds" % (time.time() - start_time))
 
         self.labels_ = labels
         return self
