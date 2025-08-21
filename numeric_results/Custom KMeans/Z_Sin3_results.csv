@@ -1,0 +1,4 @@
+Strategy,Dataset,Sensitive Feature,Clusters,Average Span (%),Silhouette Score,Davies-Bouldin Index,Time Taken (s)
+Custom KMeans,Sin3,Z,2,10.1,0.215,1.6565,16.07
+Custom KMeans,Sin3,Z,3,11.37,0.1845,1.6752,13.65
+Custom KMeans,Sin3,Z,5,28.79,0.1513,1.6926,60.18

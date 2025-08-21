@@ -1,5 +1,5 @@
 # Run script: python runFairness.py <dataset> <strategy> <n_clusters> <sensitive_feature_name>
-# Example usage: python runFairness.py Asc Sil 3 SEX
+# Example usage: python runFairness.py Acs Sil 3 SEX
 import sys
 import pandas as pd
 import numpy as np
@@ -24,13 +24,10 @@ import openpyxl
 strategy_name = "Sensitive Division KMeans"
 kmeans_strategy = "Sen"         # Options: "Cus", "Har", "Sen", "Sil", "Dbi"
 n_clusters = 5
-dataset = "Asc"                 # Options: "Asc", "Sin"
+dataset = "Acs"                 # Options: "Acs", "Sin1", "Sin2", "Sin3"
 sensitive_feature_name = "SEX"  # Options:
-                                # COW - Class of Worker
-                                # SCHL - School Enrollment
-                                # MAR - Marital Status                                
-                                # SEX - Gender
-                                # RAC1P - Race                    
+                                #   for acs: "COW", "SCHL", "MAR", "SEX", "RAC1P"
+                                #   for sin1, sin2 & sin3: "Z"
 
 def print_usage():
     print("USAGE: python runFairness.py <dataset> <strategy> <num_of_clusters> <sensitive_feature_name>")
@@ -421,6 +418,8 @@ def save_numeric_results(strategy_name, sensitive_feature_name, n_clusters, data
     # New result row
     new_row = {
         "Strategy": strategy_name,
+        "Dataset": dataset,
+        "Sensitive Feature": sensitive_feature_name,
         "Clusters": n_clusters, 
         "Average Span (%)": avg_span,
         "Silhouette Score": sil,
@@ -455,11 +454,15 @@ if __name__ == "__main__":
     n_clusters = int(sys.argv[3])
     sensitive_feature_name = sys.argv[4]
 
-    if dataset == "Asc":
+    if dataset == "Acs":
         data = fetch_acs_income()
         df = pd.DataFrame(data.data, columns=data.feature_names)
-    elif dataset == "Sin":
+    elif dataset == "Sin1":
+        df = pd.read_csv("synthetic_data/synthetic_equal_opportunity(in).csv")
+    elif dataset == "Sin2":
         df = pd.read_csv("synthetic_data/synthetic_equal_odds(in).csv")
+    elif dataset == "Sin3":
+        df = pd.read_csv("synthetic_data/synthetic_equal_quality(in).csv")
     else:
         raise ValueError(f"Unknown dataset: {dataset}")
 
@@ -503,8 +506,8 @@ if __name__ == "__main__":
     sil1, dbi1 = evaluate_clustering(X_test, fair_predictions, strategy_name)
     sil2, dbi2 = evaluate_clustering(X_test, regular_predictions, "Regular KMeans")
 
-    #create_scatter_plot(X_test, fair_predictions, strategy_name, n_clusters, centroids=fair_kmeans_model.cluster_centers_, sensitive_feature=sf_test)
+    create_scatter_plot(X_test, fair_predictions, strategy_name, n_clusters, centroids=fair_kmeans_model.cluster_centers_, sensitive_feature=sf_test)
     #create_scatter_plot(X_test, regular_predictions, "Regular KMeans", n_clusters, centroids=regular_kmeans.cluster_centers_, sensitive_feature=sf_test)
 
     save_numeric_results(strategy_name, sensitive_feature_name, n_clusters, dataset, avg_span1, sil1, dbi1, time_taken1)
-    save_numeric_results("Regular KMeans", sensitive_feature_name, n_clusters, dataset, avg_span2, sil2, dbi2, time_taken2)
+    #save_numeric_results("Regular KMeans", sensitive_feature_name, n_clusters, dataset, avg_span2, sil2, dbi2, time_taken2)

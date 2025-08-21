@@ -1,0 +1,4 @@
+Strategy,Dataset,Sensitive Feature,Clusters,Average Span (%),Silhouette Score,Davies-Bouldin Index,Time Taken (s)
+Regular KMeans,Acs,SEX,2,11.15,0.5485,0.6183,0.42
+Regular KMeans,Acs,SEX,3,36.82,0.6361,0.4431,0.35
+Regular KMeans,Acs,SEX,5,46.82,0.6044,0.4719,0.52
