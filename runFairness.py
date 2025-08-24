@@ -390,8 +390,7 @@ def create_scatter_plot(X, labels, strategy_name, num_clusters, centroids=None, 
     os.makedirs(strategy_dir, exist_ok=True)
 
     # Prepare file name
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{sensitive_feature_name}_{num_clusters}_{dataset}_scatter_{timestamp}.png"
+    filename = f"{sensitive_feature_name}_{num_clusters}_{dataset}_scatter.png"
     filepath = os.path.join(strategy_dir, filename)
 
     # Save and close figure
