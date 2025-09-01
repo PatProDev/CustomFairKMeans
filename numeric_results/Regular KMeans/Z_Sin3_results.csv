@@ -1,4 +1,4 @@
-Strategy,Dataset,Sensitive Feature,Clusters,Average Span (%),Silhouette Score,Davies-Bouldin Index,Time Taken (s)
-Regular KMeans,Sin3,Z,2,10.02,0.2151,1.6563,0.07
-Regular KMeans,Sin3,Z,3,11.38,0.1845,1.6755,0.07
-Regular KMeans,Sin3,Z,5,29.08,0.1511,1.6933,0.13
+Strategy,Dataset,Sensitive Feature,Clusters,Average Span (%),Max Silhouette Difference,Max DBI Difference,Silhouette Score,Davies-Bouldin Index,Time Taken (s)
+Regular KMeans,Sin3,Z,2,10.02,0.0289,0.1327,0.2151,1.6563,0.07
+Regular KMeans,Sin3,Z,3,11.38,0.0773,0.4802,0.1845,1.6755,0.07
+Regular KMeans,Sin3,Z,5,29.08,0.0455,0.1664,0.1511,1.6933,0.13

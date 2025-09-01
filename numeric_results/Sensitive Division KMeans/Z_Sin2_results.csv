@@ -1,0 +1,4 @@
+Strategy,Dataset,Sensitive Feature,Clusters,Average Span (%),Max Silhouette Difference,Max DBI Difference,Silhouette Score,Davies-Bouldin Index,Time Taken (s)
+Sensitive Division KMeans,Sin2,Z,2,0.34,0.1746,0.656,0.257,1.457,0.07
+Sensitive Division KMeans,Sin2,Z,3,49.41,0.2068,0.7787,0.2399,1.4082,0.08
+Sensitive Division KMeans,Sin2,Z,5,67.17,0.1363,0.3782,0.1896,1.6051,0.13

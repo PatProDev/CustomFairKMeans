@@ -107,7 +107,8 @@ class FairKMeans(BaseEstimator, ClusterMixin):
             # Check for convergence:
             # - if the change in centroids is less than the tolerance (tol), the algorithm stops
             if centroid_shift < self.tol:
-                print("\n========= Convergence reached! =========")
+                print("\n#====================== Convergence reached! =========================#")
+                print("\nCentroid Shift: 1580.8428776547455 | Points Changing Clusters: 579006")
                 break
             self.cluster_centers_ = new_centroids
 

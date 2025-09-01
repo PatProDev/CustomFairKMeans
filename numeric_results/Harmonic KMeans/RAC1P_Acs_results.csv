@@ -1,0 +1,4 @@
+Strategy,Dataset,Sensitive Feature,Clusters,Average Span (%),Max Silhouette Difference,Max DBI Difference,Silhouette Score,Davies-Bouldin Index,Time Taken (s)
+Harmonic KMeans,Acs,RAC1P,2,1.578,0.0989,0.069,0.5438,0.5394,27.51
+Harmonic KMeans,Acs,RAC1P,3,1.91,0.1358,0.0695,0.479,0.5997,33.02
+Harmonic KMeans,Acs,RAC1P,5,2.857,0.0822,0.1562,0.5568,0.5362,67.38

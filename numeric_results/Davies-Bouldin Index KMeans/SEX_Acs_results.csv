@@ -1,0 +1,4 @@
+Strategy,Dataset,Sensitive Feature,Clusters,Average Span (%),Max Silhouette Difference,Max DBI Difference,Silhouette Score,Davies-Bouldin Index,Time Taken (s)
+Davies-Bouldin Index KMeans,Acs,SEX,2,10.87,0.0554,0.0761,0.5305,0.656,25.66
+Davies-Bouldin Index KMeans,Acs,SEX,3,22.9,0.0724,0.1199,0.5176,0.5781,1.38
+Davies-Bouldin Index KMeans,Acs,SEX,5,38.82,0.0163,0.0556,0.5081,0.55,26.97

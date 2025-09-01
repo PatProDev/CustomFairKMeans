@@ -1,0 +1,4 @@
+Strategy,Dataset,Sensitive Feature,Clusters,Average Span (%),Max Silhouette Difference,Max DBI Difference,Silhouette Score,Davies-Bouldin Index,Time Taken (s)
+Silhouette Score KMeans,Acs,RAC1P,2,0.628,0.1435,0.17,0.5305,0.656,77.17
+Silhouette Score KMeans,Acs,RAC1P,3,1.928,0.053,0.0461,0.6361,0.4431,184.4
+Silhouette Score KMeans,Acs,RAC1P,5,2.628,0.062,0.1027,0.5958,0.4816,298.86

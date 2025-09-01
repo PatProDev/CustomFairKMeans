@@ -1,4 +1,4 @@
-Strategy,Dataset,Sensitive Feature,Clusters,Average Span (%),Silhouette Score,Davies-Bouldin Index,Time Taken (s)
-Regular KMeans,Acs,RAC1P,2,1.354,0.5485,0.6183,0.39
-Regular KMeans,Acs,RAC1P,3,1.928,0.6361,0.4431,0.33
-Regular KMeans,Acs,RAC1P,5,2.71,0.6045,0.4718,0.52
+Strategy,Dataset,Sensitive Feature,Clusters,Average Span (%),Max Silhouette Difference,Max DBI Difference,Silhouette Score,Davies-Bouldin Index,Time Taken (s)
+Regular KMeans,Acs,RAC1P,2,1.354,0.1756,0.1425,0.5485,0.6183,0.37
+Regular KMeans,Acs,RAC1P,3,1.928,0.053,0.0461,0.6361,0.4431,0.35
+Regular KMeans,Acs,RAC1P,5,2.71,0.0833,0.09,0.6045,0.4718,0.52

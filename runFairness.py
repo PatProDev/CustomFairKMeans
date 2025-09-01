@@ -11,14 +11,13 @@ from collections import Counter
 from strategies.customFairKMeans import FairKMeans
 from strategies.harmonicKMeans import HarmonicKMeans
 from strategies.sensitiveDivisionKMeans import SensitiveDivisionKMeans
-#from strategies.metricDrivenKMeans import MetricDrivenKMeans
 from strategies.silhouetteDbiKMeans import SilhouetteDbiKMeans
 import time
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
-from datetime import datetime
 import os
-import openpyxl
+from sklearn.preprocessing import MinMaxScaler
+
 
 # Default values for the parameters
 strategy_name = "Sensitive Division KMeans"
@@ -74,6 +73,10 @@ def process_dataset(X, sensitive_feature):
     # Encode categorical features in X
     X_encoded = X_df.apply(lambda col: pd.factorize(col)[0] if col.dtypes == 'object' else col).values
 
+    # Normalize numeric features
+    # scaler = MinMaxScaler()
+    # X_encoded = scaler.fit_transform(X_encoded)
+
     # Fill NaN values and encode sensitive feature
     sensitive_feature = pd.Series(sensitive_feature).fillna("unknown")
     sensitive_feature_encoded = pd.factorize(sensitive_feature)[0]
@@ -126,7 +129,7 @@ def run_strategy(kmeans_strategy):
 
             # Predict and evaluate FairKMeans on test set
             fair_predictions = fair_kmeans.predict(X_test)
-            fair_distribution = calculate_cluster_sensitive_distribution(fair_predictions, sf_test)
+            fair_distribution = evaluate_cluster_sensitive_distribution(fair_predictions, sf_test)
 
         case "Har":
             strategy_name = "Harmonic KMeans"
@@ -136,7 +139,7 @@ def run_strategy(kmeans_strategy):
 
             # Predict and evaluate HarmonicKMeans on test set
             fair_predictions = fair_kmeans.predict(X_test)
-            fair_distribution = calculate_cluster_sensitive_distribution(fair_predictions, sf_test)
+            fair_distribution = evaluate_cluster_sensitive_distribution(fair_predictions, sf_test)
 
         case "Sen":
             strategy_name = "Sensitive Division KMeans"
@@ -146,7 +149,7 @@ def run_strategy(kmeans_strategy):
 
             # Predict and evaluate SensitiveDivisionKMeans on test set
             fair_predictions = fair_kmeans.predict(X_test)
-            fair_distribution = calculate_cluster_sensitive_distribution(fair_predictions, sf_test)
+            fair_distribution = evaluate_cluster_sensitive_distribution(fair_predictions, sf_test)
         
         case "Sil":
             strategy_name = "Silhouette Score KMeans"    
@@ -157,7 +160,7 @@ def run_strategy(kmeans_strategy):
 
             # Predict and evaluate SilhouetteDbiKMeans on test set
             fair_predictions = fair_kmeans.predict(X_test)
-            fair_distribution = calculate_cluster_sensitive_distribution(fair_predictions, sf_test)
+            fair_distribution = evaluate_cluster_sensitive_distribution(fair_predictions, sf_test)
 
         case "Dbi":
             strategy_name = "Davies-Bouldin Index KMeans"    
@@ -168,12 +171,12 @@ def run_strategy(kmeans_strategy):
 
             # Predict and evaluate SilhouetteDbiKMeans on test set
             fair_predictions = fair_kmeans.predict(X_test)
-            fair_distribution = calculate_cluster_sensitive_distribution(fair_predictions, sf_test)   
+            fair_distribution = evaluate_cluster_sensitive_distribution(fair_predictions, sf_test)   
     
     return fair_distribution, fair_predictions, strategy_name, fair_kmeans
 
-# Get cluster-wise distribution of sensitive features
-def calculate_cluster_sensitive_distribution(labels, sensitive_feature):
+# Evaluating cluster-wise distribution of sensitive features
+def evaluate_cluster_sensitive_distribution(labels, sensitive_feature):
     """
     Compute the distribution of sensitive features within each cluster.
 
@@ -210,7 +213,7 @@ def calculate_cluster_sensitive_distribution(labels, sensitive_feature):
 
     return distribution
 
-def print_cluster_sensitive_distribution(distribution, clustring_method="Regular KMeans"):
+def print_cluster_sensitive_distribution(distribution, clustering_method="Regular KMeans"):
     """
     Pretty-print the sensitive feature distribution as a table.
     """
@@ -253,12 +256,102 @@ def print_cluster_sensitive_distribution(distribution, clustring_method="Regular
     avg_row[all_sensitive_values[0]] = f"{avg_span:.2f}%"  # put value in first column
     df.loc["Average Span"] = avg_row
 
-    print(f'\nFeature Distribution ({clustring_method}):')
+    print(f'\nFeature Distribution ({clustering_method}):')
     print(df.to_string())
     return avg_span
 
-# Silhouette and Davies-Bouldin evaluation
-def evaluate_clustering(X, labels, name="Clustering", sample_size=10000, random_state=42, sample_dbi=False):
+def evaluate_sensitive_groups_clustering(X, y_sensitive, labels, sample_frac=0.4, random_state=42):
+    """
+    Evaluate clustering fairness across sensitive groups (on a sample for efficiency).
+
+    Parameters
+    ----------
+    X : ndarray, shape (n_samples, n_features)
+    y_sensitive : ndarray, shape (n_samples,)
+    labels : ndarray, shape (n_samples,)
+    sample_frac : float, optional
+        Fraction of data to sample for evaluation (default: 0.4)
+    random_state : int, optional
+        Seed for reproducibility.
+
+    Returns
+    -------
+    dict with per-group silhouette/DBI and max differences
+    """
+    rng = np.random.RandomState(random_state)
+
+    # --- Sampling ---
+    n_samples = X.shape[0]
+    sample_size = int(n_samples * sample_frac)
+    sample_idx = rng.choice(n_samples, sample_size, replace=False)
+
+    X = X[sample_idx]
+    y_sensitive = y_sensitive[sample_idx]
+    labels = labels[sample_idx]
+
+    groups = np.unique(y_sensitive)
+    silhouette_scores = {}
+    dbi_scores = {}
+
+    for g in groups:
+        mask = (y_sensitive == g)
+        X_g = X[mask]
+        labels_g = labels[mask]
+
+        if len(np.unique(labels_g)) > 1 and len(X_g) > 10:
+            sil = silhouette_score(X_g, labels_g)
+            dbi = davies_bouldin_score(X_g, labels_g)
+        else:
+            sil = 0.0
+            dbi = float("inf")
+
+        silhouette_scores[g] = sil
+        dbi_scores[g] = dbi
+
+    max_sil_diff = max(silhouette_scores.values()) - min(silhouette_scores.values())
+    finite_dbi = [v for v in dbi_scores.values() if np.isfinite(v)]
+    max_dbi_diff = max(finite_dbi) - min(finite_dbi) if finite_dbi else float("inf")
+
+    return {
+        "silhouette_scores": silhouette_scores,
+        "dbi_scores": dbi_scores,
+        "max_silhouette_diff": max_sil_diff,
+        "max_dbi_diff": max_dbi_diff
+    }
+
+def print_sensitive_groups_clustering(results, feature_name, clustering_method):
+    """
+    Pretty-print per-group clustering evaluation and differences.
+    """
+    silhouette_scores = results["silhouette_scores"]
+    dbi_scores = results["dbi_scores"]
+
+    # Build table
+    data = []
+    for group in silhouette_scores.keys():
+        data.append({
+            feature_name: group,
+            "Silhouette": f"{silhouette_scores[group]:.4f}",
+            "DBI": f"{dbi_scores[group]:.4f}" if dbi_scores[group] != float("inf") else "inf"
+        })
+
+    df = pd.DataFrame(data).set_index(feature_name)
+
+    # Separator
+    separator = {col: "=" * len(str(val)) for col, val in zip(df.columns, df.iloc[0])}
+    df.loc["======="] = separator
+
+    # Differences
+    df.loc["Max Difference"] = {
+        "Silhouette": f"{results['max_silhouette_diff']:.4f}",
+        "DBI": f"{results['max_dbi_diff']:.4f}"
+    }
+
+    print(f"\nPer-Group Evaluation ({clustering_method}):")
+    print(df.to_string())
+
+# Silhouette and Davies-Bouldin global evaluation
+def evaluate_global_clustering(X, labels, name="Clustering", sample_size=10000, random_state=42, sample_dbi=False):
     """
     Fast evaluation of clustering quality.
 
@@ -300,12 +393,13 @@ def evaluate_clustering(X, labels, name="Clustering", sample_size=10000, random_
     else:
         dbi = davies_bouldin_score(X, labels)
 
-    print(f"\n{name} Evaluation")
+    print(f"\n{name} Global Evaluation")
     print(f"  Silhouette score (sampled): {sil:.4f}")
     print(f"  Davies-Bouldin index      : {dbi:.4f}")
     return sil, dbi
 
-def create_scatter_plot(X, labels, strategy_name, num_clusters, centroids=None, sensitive_feature=None, save_dir="scatter_plots"):
+# Creating and saving final results
+def create_and_save_scatter_plot(X, labels, strategy_name, num_clusters, centroids=None, sensitive_feature=None, save_dir="scatter_plots"):
     """
     Creates and saves a scatter plot for one clustering result.
 
@@ -399,7 +493,7 @@ def create_scatter_plot(X, labels, strategy_name, num_clusters, centroids=None, 
 
     print(f"Scatter plot saved to: {filepath}")
 
-def save_numeric_results(strategy_name, sensitive_feature_name, n_clusters, dataset, avg_span, sil, dbi, time_taken):
+def save_numeric_results(strategy_name, sensitive_feature_name, n_clusters, dataset, avg_span, sil, dbi, time_taken, max_diff_results1):
     # Prepare directory path
     results_dir = os.path.join("numeric_results", strategy_name)
     os.makedirs(results_dir, exist_ok=True)
@@ -414,6 +508,14 @@ def save_numeric_results(strategy_name, sensitive_feature_name, n_clusters, data
     dbi = round(dbi, 4)
     time_taken = round(time_taken, 2)
 
+    # Handle case where max_diff_results1 might be None or incomplete
+    if max_diff_results1 is not None:
+        max_sil_diff = round(max_diff_results1.get("max_silhouette_diff", float("nan")), 4)
+        max_dbi_diff = round(max_diff_results1.get("max_dbi_diff", float("nan")), 4)
+    else:
+        max_sil_diff = float("nan")
+        max_dbi_diff = float("nan")
+
     # New result row
     new_row = {
         "Strategy": strategy_name,
@@ -421,6 +523,8 @@ def save_numeric_results(strategy_name, sensitive_feature_name, n_clusters, data
         "Sensitive Feature": sensitive_feature_name,
         "Clusters": n_clusters, 
         "Average Span (%)": avg_span,
+        "Max Silhouette Difference": max_sil_diff,
+        "Max DBI Difference": max_dbi_diff,
         "Silhouette Score": sil,
         "Davies-Bouldin Index": dbi,
         "Time Taken (s)": time_taken
@@ -490,23 +594,29 @@ if __name__ == "__main__":
     # Predict and evaluate KMeans on test set
     regular_predictions = regular_kmeans.predict(X_test)
     time_taken2 = time.time() - start_time
-    regular_distribution = calculate_cluster_sensitive_distribution(regular_predictions, sf_test)
+    regular_distribution = evaluate_cluster_sensitive_distribution(regular_predictions, sf_test)
 
     start_time = time.time()                    
     fair_distribution, fair_predictions, strategy_name, fair_kmeans_model = run_strategy(kmeans_strategy)
     time_taken1 = time.time() - start_time
     print("Time taken: %s seconds" % (time_taken1))
+    print("Evaluating Silhouette and DBI for sensitive groups...")
+    max_diff_results1 = evaluate_sensitive_groups_clustering(X_test, sf_test, fair_predictions)
+    max_diff_results2 = evaluate_sensitive_groups_clustering(X_test, sf_test, regular_predictions)
 
     print_global_ratios(global_ratios, sensitive_feature_name)
     
     avg_span1 = print_cluster_sensitive_distribution(fair_distribution, strategy_name)
     avg_span2 = print_cluster_sensitive_distribution(regular_distribution, "Regular KMeans")
 
-    sil1, dbi1 = evaluate_clustering(X_test, fair_predictions, strategy_name)
-    sil2, dbi2 = evaluate_clustering(X_test, regular_predictions, "Regular KMeans")
+    print_sensitive_groups_clustering(max_diff_results1, sensitive_feature_name, strategy_name)
+    print_sensitive_groups_clustering(max_diff_results2, sensitive_feature_name, "Regular KMeans")
 
-    create_scatter_plot(X_test, fair_predictions, strategy_name, n_clusters, centroids=fair_kmeans_model.cluster_centers_, sensitive_feature=sf_test)
-    #create_scatter_plot(X_test, regular_predictions, "Regular KMeans", n_clusters, centroids=regular_kmeans.cluster_centers_, sensitive_feature=sf_test)
+    sil1, dbi1 = evaluate_global_clustering(X_test, fair_predictions, strategy_name)
+    sil2, dbi2 = evaluate_global_clustering(X_test, regular_predictions, "Regular KMeans")
 
-    save_numeric_results(strategy_name, sensitive_feature_name, n_clusters, dataset, avg_span1, sil1, dbi1, time_taken1)
-    #save_numeric_results("Regular KMeans", sensitive_feature_name, n_clusters, dataset, avg_span2, sil2, dbi2, time_taken2)
+    #create_and_save_scatter_plot(X_test, fair_predictions, strategy_name, n_clusters, centroids=fair_kmeans_model.cluster_centers_, sensitive_feature=sf_test)
+    #create_and_save_scatter_plot(X_test, regular_predictions, "Regular KMeans", n_clusters, centroids=regular_kmeans.cluster_centers_, sensitive_feature=sf_test)
+
+    #save_numeric_results(strategy_name, sensitive_feature_name, n_clusters, dataset, avg_span1, sil1, dbi1, time_taken1, max_diff_results1)
+    #save_numeric_results("Regular KMeans", sensitive_feature_name, n_clusters, dataset, avg_span2, sil2, dbi2, time_taken2, max_diff_results2)
