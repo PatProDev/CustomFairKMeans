@@ -41,8 +41,8 @@ class HarmonicKMeans(BaseEstimator, ClusterMixin):
 
             # Iterate over all data points and assign them to the closest cluster 
             for i, data_point in enumerate(X):
-                distances = np.linalg.norm(self.cluster_centers_ - data_point, axis=1)     # Compute the distance from data point to all centroids                
-                sorted_clusters = np.argsort(distances)                             # Sort clusters by distance                   
+                distances = np.linalg.norm(self.cluster_centers_ - data_point, axis=1)      # Compute the distance from data point to all centroids                
+                sorted_clusters = np.argsort(distances)                                     # Sort clusters by distance                   
                 
                 for cluster in sorted_clusters:
                     labels[i] = cluster

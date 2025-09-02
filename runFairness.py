@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import silhouette_score, davies_bouldin_score
 from fairlearn.datasets import fetch_acs_income
 from collections import Counter
-from strategies.customFairKMeans import FairKMeans
+from strategies.globalRatiosKMeans import GlobalRatiosKMeans
 from strategies.harmonicKMeans import HarmonicKMeans
 from strategies.sensitiveDivisionKMeans import SensitiveDivisionKMeans
 from strategies.silhouetteDbiKMeans import SilhouetteDbiKMeans
@@ -21,9 +21,9 @@ from sklearn.preprocessing import MinMaxScaler
 
 # Default values for the parameters
 strategy_name = "Sensitive Division KMeans"
-kmeans_strategy = "Sen"         # Options: "Cus", "Har", "Sen", "Sil", "Dbi"
+kmeans_strategy = "Sen"         # Options: "Glr", "Har", "Sen", "Sil", "Dbi"
 n_clusters = 5
-dataset = "Acs"                 # Options: "Acs", "Sin1", "Sin2", "Sin3"
+dataset_name = "Acs"            # Options: "Acs", "Sin1", "Sin2", "Sin3"
 sensitive_feature_name = "SEX"  # Options:
                                 #   for acs: "COW", "SCHL", "MAR", "SEX", "RAC1P"
                                 #   for sin1, sin2 & sin3: "Z"
@@ -46,7 +46,7 @@ def print_usage():
     print("    SEX - Gender")
     print("    RAC1P - Race")   
 
-def process_dataset(X, sensitive_feature):
+def process_dataset(X, target_feature):
     """
     Encode all class values in X and sensitive_feature with numeric values and handle missing values.
 
@@ -74,14 +74,14 @@ def process_dataset(X, sensitive_feature):
     X_encoded = X_df.apply(lambda col: pd.factorize(col)[0] if col.dtypes == 'object' else col).values
 
     # Normalize numeric features
-    # scaler = MinMaxScaler()
-    # X_encoded = scaler.fit_transform(X_encoded)
+    scaler = MinMaxScaler()
+    X_encoded = scaler.fit_transform(X_encoded)
 
     # Fill NaN values and encode sensitive feature
-    sensitive_feature = pd.Series(sensitive_feature).fillna("unknown")
-    sensitive_feature_encoded = pd.factorize(sensitive_feature)[0]
+    target_feature = pd.Series(target_feature).fillna("unknown")
+    target_feature_encoded = pd.factorize(target_feature)[0]
 
-    return X_encoded, sensitive_feature_encoded
+    return X_encoded, target_feature_encoded
 
 def get_global_ratios(sensitive_feature):
     """
@@ -121,10 +121,10 @@ def print_global_ratios(global_ratios, sensitive_feature_name):
 
 def run_strategy(kmeans_strategy):
     match kmeans_strategy:
-        case "Cus":
-            strategy_name = "Custom KMeans"
+        case "Glr":
+            strategy_name = "Global Ratio KMeans"
             # Instantiate and fit the FairKMeans
-            fair_kmeans = FairKMeans(n_clusters, random_state=42)
+            fair_kmeans = GlobalRatiosKMeans(n_clusters, random_state=42)
             fair_kmeans.fit(X_train, sf_train, global_ratios)
 
             # Predict and evaluate FairKMeans on test set
@@ -154,7 +154,6 @@ def run_strategy(kmeans_strategy):
         case "Sil":
             strategy_name = "Silhouette Score KMeans"    
             # Instantiate and fit the SilhouetteDbiKMeans model
-            # silhouette_kmeans = MetricDrivenKMeans(n_clusters, use_dbi=False, score_threshold=0.5, random_state=42)
             fair_kmeans = SilhouetteDbiKMeans(n_clusters, use_dbi=False, score_threshold=0.6, random_state=42)
             fair_kmeans.fit(X_train)
 
@@ -165,7 +164,6 @@ def run_strategy(kmeans_strategy):
         case "Dbi":
             strategy_name = "Davies-Bouldin Index KMeans"    
             # Instantiate and fit the SilhouetteDbiKMeans model
-            #dbi_kmeans = MetricDrivenKMeans(n_clusters, use_dbi=True, score_threshold=0.5, random_state=42)
             fair_kmeans = SilhouetteDbiKMeans(n_clusters, use_dbi=True, score_threshold=0.5, random_state=42)
             fair_kmeans.fit(X_train)
 
@@ -484,7 +482,7 @@ def create_and_save_scatter_plot(X, labels, strategy_name, num_clusters, centroi
     os.makedirs(strategy_dir, exist_ok=True)
 
     # Prepare file name
-    filename = f"{sensitive_feature_name}_{num_clusters}_{dataset}_scatter.png"
+    filename = f"{sensitive_feature_name}_{num_clusters}_{dataset_name}_scatter.png"
     filepath = os.path.join(strategy_dir, filename)
 
     # Save and close figure
@@ -552,38 +550,49 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Read command line arguments
-    dataset = sys.argv[1]
+    dataset_name = sys.argv[1]
     kmeans_strategy = sys.argv[2]
     n_clusters = int(sys.argv[3])
     sensitive_feature_name = sys.argv[4]
 
-    if dataset == "Acs":
-        data = fetch_acs_income()
-        df = pd.DataFrame(data.data, columns=data.feature_names)
-    elif dataset == "Sin1":
+    if dataset_name == "Acs":
+        dataset = fetch_acs_income()
+        df = pd.DataFrame(dataset.data, columns=dataset.feature_names)
+        target_feature = dataset.target
+    elif dataset_name == "Sin1":
         df = pd.read_csv("synthetic_data/synthetic_equal_opportunity(in).csv")
-    elif dataset == "Sin2":
+    elif dataset_name == "Sin2":
         df = pd.read_csv("synthetic_data/synthetic_equal_odds(in).csv")
-    elif dataset == "Sin3":
+    elif dataset_name == "Sin3":
         df = pd.read_csv("synthetic_data/synthetic_equal_quality(in).csv")
     else:
-        raise ValueError(f"Unknown dataset: {dataset}")
+        raise ValueError(f"Unknown dataset: {dataset_name}")
 
     # Ensure 'sensitive_feature_name' column is present
     if sensitive_feature_name not in df.columns:
         raise ValueError(f"The '{sensitive_feature_name}' column is not found in the dataset.")
 
-    # Extract sensitive feature and remove it from features
+    if dataset_name == "Acs":
+        X = df.values
+    else:
+        target_feature = df["y"]
+        X = df.drop(columns=["y"]).values
+    
+    # Extract sensitive feature
     sensitive_feature = df[sensitive_feature_name].values
-    X = df.drop(columns=[sensitive_feature_name]).values
+    # X = df.drop(columns=[sensitive_feature_name]).values
 
-    X, sensitive_feature = process_dataset(X, sensitive_feature)
+    X, target_feature = process_dataset(X, target_feature)
 
     # Get the global ratio of each sensitive feature value
     global_ratios = get_global_ratios(sensitive_feature)
 
     # Split the data into training and testing sets (80-20 split)
-    X_train, X_test, sf_train, sf_test = train_test_split(
+    X_train, X_test, tf_train, tf_test = train_test_split(
+        X, target_feature, test_size=0.2, random_state=42
+    )
+
+    _, _, sf_train, sf_test = train_test_split(
         X, sensitive_feature, test_size=0.2, random_state=42
     )
 
